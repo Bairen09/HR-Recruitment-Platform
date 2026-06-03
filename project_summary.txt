@@ -1,0 +1,152 @@
+HR Recruitment Platform - Project Structure
+==========================================
+
+backend
+├── .env
+├── package-lock.json
+├── package.json
+└── src
+    ├── app.js
+    ├── config
+    │   └── database.js
+    ├── constants
+    │   ├── callOutcomes.js
+    │   ├── candidateStatus.js
+    │   ├── dropReasons.js
+    │   ├── interestStatus.js
+    │   ├── roles.js
+    │   ├── timelineEvents.js
+    │   └── userRoles.js
+    ├── jobs
+    ├── middleware
+    │   ├── auth.middleware.js
+    │   ├── error.middleware.js
+    │   ├── role.middleware.js
+    │   └── upload.middleware.js
+    ├── modules
+    │   ├── activity
+    │   │   ├── activity.controller.js
+    │   │   ├── activity.routes.js
+    │   │   └── activity.service.js
+    │   ├── ai
+    │   │   ├── candidateExtractor.service.js
+    │   │   ├── profileUpdater.service.js
+    │   │   └── resumeParser.service.js
+    │   ├── audits
+    │   │   └── candidateAudit.model.js
+    │   ├── auth
+    │   │   ├── auth.controller.js
+    │   │   ├── auth.model.js
+    │   │   ├── auth.routes.js
+    │   │   ├── auth.service.js
+    │   │   └── auth.validation.js
+    │   ├── calls
+    │   │   ├── call.controller.js
+    │   │   ├── call.model.js
+    │   │   ├── call.routes.js
+    │   │   ├── call.service.js
+    │   │   └── call.validation.js
+    │   ├── candidates
+    │   │   ├── candidate.controller.js
+    │   │   ├── candidate.model.js
+    │   │   ├── candidate.routes.js
+    │   │   ├── candidate.service.js
+    │   │   ├── candidate.validation.js
+    │   │   ├── candidateDetails.controller.js
+    │   │   ├── candidateDetails.routes.js
+    │   │   ├── candidateDetails.service.js
+    │   │   ├── candidateStatus.service.js
+    │   │   ├── candidateWorkflow.controller.js
+    │   │   ├── candidateWorkflow.routes.js
+    │   │   └── candidateWorkflow.service.js
+    │   ├── dashboard
+    │   │   ├── dashboard.controller.js
+    │   │   ├── dashboard.routes.js
+    │   │   └── dashboard.service.js
+    │   ├── health
+    │   │   ├── health.controller.js
+    │   │   └── health.routes.js
+    │   ├── interviews
+    │   │   ├── interview.controller.js
+    │   │   ├── interview.model.js
+    │   │   ├── interview.routes.js
+    │   │   ├── interview.service.js
+    │   │   └── interview.validation.js
+    │   ├── notifications
+    │   │   ├── notification.controller.js
+    │   │   ├── notification.model.js
+    │   │   ├── notification.routes.js
+    │   │   └── notification.service.js
+    │   ├── profiles
+    │   │   └── candidateProfile.model.js
+    │   ├── reports
+    │   │   ├── report.controller.js
+    │   │   ├── report.routes.js
+    │   │   └── report.service.js
+    │   ├── resumes
+    │   │   ├── resume.controller.js
+    │   │   ├── resume.model.js
+    │   │   ├── resume.routes.js
+    │   │   └── resume.service.js
+    │   ├── search
+    │   │   ├── search.controller.js
+    │   │   ├── search.routes.js
+    │   │   └── search.service.js
+    │   ├── settings
+    │   │   ├── settings.controller.js
+    │   │   ├── settings.model.js
+    │   │   ├── settings.routes.js
+    │   │   └── settings.service.js
+    │   ├── tasks
+    │   │   ├── task.controller.js
+    │   │   ├── task.model.js
+    │   │   ├── task.routes.js
+    │   │   ├── task.service.js
+    │   │   └── task.validation.js
+    │   ├── timelines
+    │   │   └── candidateTimeline.model.js
+    │   ├── uploads
+    │   └── users
+    │       ├── user.controller.js
+    │       ├── user.routes.js
+    │       ├── user.service.js
+    │       └── user.validation.js
+    ├── routes
+    │   └── index.js
+    ├── scripts
+    │   └── createAdmin.js
+    ├── server.js
+    └── shared
+        ├── errors
+        │   └── AppError.js
+        ├── logger
+        ├── response
+        │   └── apiResponse.js
+        ├── services
+        │   ├── audit.service.js
+        │   ├── candidateCode.service.js
+        │   └── timeline.service.js
+        └── utils
+            ├── asyncHandler.js
+            ├── generateToken.js
+            ├── pagination.js
+            └── validateRequest.js
+
+frontend
+
+==========================================
+Summary of Implemented Features & Modules:
+==========================================
+Backend (Node.js/Express):
+- Architecture: Modular structure grouped by domain (src/modules/*)
+- Auth Module: Login, JWT generation (access & refresh tokens), Logout functionality.
+- Users Module: User management, profiles, validation.
+- Candidates Module: Candidate data, workflows, candidate status progression.
+- Calls Module: Logging calls, outcome tracking, timeline integration, follow-up scheduling (Today & Upcoming).
+- Settings Module: Global configurations for the platform (company details, reminders, resume settings) with Admin role protection.
+- Activity Module: Activity feed/audit logs (fetching candidate timelines, etc.).
+- Health Module: Application health checks and uptime monitoring.
+- Additional Setup: Centralized API response handlers, error handling, auth/role middleware, and Timeline/Notification integrations.
+
+Frontend:
+- Structure initialized.
