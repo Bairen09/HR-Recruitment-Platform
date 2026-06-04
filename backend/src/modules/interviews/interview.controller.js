@@ -6,6 +6,30 @@ import {
 
 import * as interviewService from "./interview.service.js";
 
+export const listInterviews =
+  asyncHandler(async (req, res) => {
+    const interviews =
+      await interviewService.listInterviews();
+
+    return successResponse(
+      res,
+      interviews
+    );
+  });
+
+export const getInterview =
+  asyncHandler(async (req, res) => {
+    const interview =
+      await interviewService.getInterview(
+        req.params.id
+      );
+
+    return successResponse(
+      res,
+      interview
+    );
+  });
+
 export const createInterview =
   asyncHandler(async (req, res) => {
     const interview =

@@ -1,50 +1,37 @@
-
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/layouts/AppShell";
 import { PageHeader } from "@/components/PageHeader";
 import { taskService } from "@/services";
 import type { Task, TaskStatus } from "@/types";
 import { format, isPast } from "date-fns";
-import { CheckCircle2, Clock, Loader2 } from "lucide-react";
+import { CheckCircle2, Clock, Loader2, XCircle } from "lucide-react";
 
 
 
 const COLUMNS: { id: TaskStatus; label: string; tone: string }[] = [
-  { id: "TODO", label: "To do", tone: "bg-info/10 text-info" },
-  { id: "IN_PROGRESS", label: "In progress", tone: "bg-primary/10 text-primary" },
-  { id: "REVIEW", label: "Review", tone: "bg-accent/20 text-accent-foreground" },
-  { id: "DONE", label: "Done", tone: "bg-success/10 text-success" },
+  { id: "ASSIGNED", label: "Assigned", tone: "bg-info/10 text-info" },
+  { id: "SUBMITTED", label: "Submitted", tone: "bg-primary/10 text-primary" },
+  { id: "PASSED", label: "Passed", tone: "bg-success/10 text-success" },
+  { id: "FAILED", label: "Failed", tone: "bg-destructive/10 text-destructive" },
 ];
 
-const PRIO_TONE: Record<Task["priority"], string> = {
-  LOW: "bg-muted text-muted-foreground",
-  MEDIUM: "bg-info/10 text-info",
-  HIGH: "bg-accent/20 text-accent-foreground",
-  URGENT: "bg-destructive/10 text-destructive",
-};
-
 export default function TasksPage() {
-  const qc = useQueryClient();
   const { data: tasks = [] } = useQuery({ queryKey: ["tasks"], queryFn: () => taskService.list() });
 
-  const update = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: TaskStatus }) => taskService.updateStatus(id, status),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
-  });
-
-  const due = tasks.filter((t) => isPast(new Date(t.dueDate)) && t.status !== "DONE").length;
-  const done = tasks.filter((t) => t.status === "DONE").length;
-  const inFlight = tasks.filter((t) => t.status === "IN_PROGRESS").length;
+  const assigned = tasks.filter((t) => t.status === "ASSIGNED").length;
+  const submitted = tasks.filter((t) => t.status === "SUBMITTED").length;
+  const passed = tasks.filter((t) => t.status === "PASSED").length;
+  const failed = tasks.filter((t) => t.status === "FAILED").length;
 
   return (
     <>
-      <PageHeader title="Tasks" description="Kanban view of recruitment work across your team." />
+      <PageHeader title="Candidate Assessments" description="Track assessment tasks assigned to candidates." />
 
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Mini label="Total" value={tasks.length} icon={<Clock className="size-4" />} />
-        <Mini label="In progress" value={inFlight} icon={<Loader2 className="size-4" />} />
-        <Mini label="Overdue" value={due} icon={<Clock className="size-4" />} tone="text-destructive" />
-        <Mini label="Done" value={done} icon={<CheckCircle2 className="size-4" />} tone="text-success" />
+        <Mini label="Assigned" value={assigned} icon={<Clock className="size-4" />} tone="text-info" />
+        <Mini label="To Review" value={submitted} icon={<Loader2 className="size-4" />} tone="text-primary" />
+        <Mini label="Passed" value={passed} icon={<CheckCircle2 className="size-4" />} tone="text-success" />
+        <Mini label="Failed" value={failed} icon={<XCircle className="size-4" />} tone="text-destructive" />
       </div>
 
       <div className="scrollbar-thin grid grid-cols-1 gap-4 overflow-x-auto md:grid-cols-2 xl:grid-cols-4">
@@ -61,23 +48,11 @@ export default function TasksPage() {
               <ul className="scrollbar-thin flex-1 space-y-2 overflow-y-auto">
                 {items.map((t) => (
                   <li key={t.id} className="group rounded-xl border border-border bg-background/50 p-3 transition hover:border-primary/40 hover:shadow-sm">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-medium text-foreground">{t.title}</p>
-                      <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium uppercase ${PRIO_TONE[t.priority]}`}>{t.priority}</span>
-                    </div>
-                    {t.description && <p className="mt-1 text-xs text-muted-foreground">{t.description}</p>}
+                    <p className="text-sm font-medium text-foreground">{t.title}</p>
+                    {t.candidateName && <p className="mt-1 text-xs text-muted-foreground">Candidate: {t.candidateName}</p>}
                     <div className="mt-3 flex items-center justify-between text-[11px] text-muted-foreground">
-                      <span>Due {format(new Date(t.dueDate), "MMM d")}</span>
+                      <span>Due {t.dueDate ? format(new Date(t.dueDate), "MMM d") : "—"}</span>
                       <span>{t.assigneeName}</span>
-                    </div>
-                    <div className="mt-3 flex items-center gap-1">
-                      {COLUMNS.filter((c) => c.id !== col.id).map((c) => (
-                        <button
-                          key={c.id}
-                          onClick={() => update.mutate({ id: t.id, status: c.id })}
-                          className="rounded-md border border-border bg-card px-2 py-0.5 text-[10px] text-muted-foreground transition hover:border-primary hover:text-primary"
-                        >→ {c.label}</button>
-                      ))}
                     </div>
                   </li>
                 ))}

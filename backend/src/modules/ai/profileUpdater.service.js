@@ -11,8 +11,14 @@ export const updateProfileFromResume =
         candidateId,
       },
       {
+        location:
+          extractedData.location,
+
         skills:
           extractedData.skills,
+
+        inferredSkills:
+          extractedData.inferredSkills,
 
         education:
           extractedData.education,

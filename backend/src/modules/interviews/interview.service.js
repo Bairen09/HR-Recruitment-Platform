@@ -18,6 +18,27 @@ import {
   TIMELINE_EVENTS,
 } from "../../constants/timelineEvents.js";
 
+export const listInterviews =
+  async () => {
+    return Interview.find()
+      .populate("candidateId", "name email code")
+      .populate("scheduledBy", "name email")
+      .sort({ scheduledAt: -1 });
+  };
+
+export const getInterview =
+  async (interviewId) => {
+    const interview = await Interview.findById(interviewId)
+      .populate("candidateId", "name email code")
+      .populate("scheduledBy", "name email");
+
+    if (!interview) {
+      throw new AppError("Interview not found", 404);
+    }
+
+    return interview;
+  };
+
 export const createInterview =
   async (
     payload,

@@ -1,141 +1,37 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from "openai";
+import { ALL_SKILLS } from "../constants/skillDictionary.js";
+import { fallbackParseResume } from "./resumeFallbackParser.js";
 
-let genAI;
-const getGenAI = () => {
-  if (!genAI) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      console.error("[GEMINI] ❌ GEMINI_API_KEY not found in environment");
-      throw new Error("Gemini API key not configured");
-    }
-    console.log(`[GEMINI] ✅ API key loaded (${apiKey.substring(0, 6)}...)`);
-    genAI = new GoogleGenerativeAI(apiKey);
-  }
-  return genAI;
-};
-
-/**
- * Regex-based fallback parser for when Gemini is unavailable
- * Extracts basic candidate info directly from resume text
- */
-function fallbackParseResume(resumeText) {
-  console.log("[FALLBACK] Using regex-based resume parser");
-
-  // Extract email
-  const emailMatch = resumeText.match(
-    /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/
-  );
-  const email = emailMatch ? emailMatch[0].toLowerCase().trim() : null;
-
-  // Extract phone (various formats)
-  const phoneMatch = resumeText.match(
-    /(?:\+?\d{1,3}[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/
-  );
-  const phone = phoneMatch ? phoneMatch[0].trim() : null;
-
-  // Extract name - try first non-empty line that looks like a name
-  let name = "Unknown Candidate";
-  const lines = resumeText
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
-  for (const line of lines.slice(0, 5)) {
-    // Check first 5 lines
-    const cleaned = line.replace(/[^a-zA-Z\s.-]/g, "").trim();
-    if (
-      cleaned.length >= 3 &&
-      cleaned.length <= 60 &&
-      cleaned.split(/\s+/).length >= 2 &&
-      cleaned.split(/\s+/).length <= 5 &&
-      !/[@.com]/.test(line) &&
-      !/\d{3}/.test(line)
-    ) {
-      name = cleaned;
-      break;
-    }
-  }
-
-  // Extract skills by looking for common tech keywords
-  const skillKeywords = [
-    "JavaScript",
-    "TypeScript",
-    "React",
-    "Node.js",
-    "Python",
-    "Java",
-    "C++",
-    "C#",
-    "SQL",
-    "MongoDB",
-    "PostgreSQL",
-    "AWS",
-    "Docker",
-    "Kubernetes",
-    "Git",
-    "HTML",
-    "CSS",
-    "Angular",
-    "Vue",
-    "Express",
-    "Django",
-    "Flask",
-    "Spring",
-    "REST",
-    "GraphQL",
-    "Redis",
-    "Linux",
-    "Agile",
-    "Scrum",
-    "CI/CD",
-    "Machine Learning",
-    "AI",
-    "Data Science",
-    "PHP",
-    "Ruby",
-    "Swift",
-    "Kotlin",
-    "Go",
-    "Rust",
-  ];
-  const textLower = resumeText.toLowerCase();
-  const skills = skillKeywords.filter((s) =>
-    textLower.includes(s.toLowerCase())
-  );
-
-  // Extract years of experience
-  const expMatch = resumeText.match(
-    /(\d{1,2})\+?\s*(?:years?|yrs?)\s*(?:of\s*)?(?:experience|exp)/i
-  );
-  const experienceYears = expMatch ? parseInt(expMatch[1]) : 0;
-
-  console.log(
-    `[FALLBACK] Extracted: name="${name}", email="${email}", phone="${phone}", skills=${skills.length}`
-  );
-
-  return {
-    name,
-    email,
-    phone,
-    skills,
-    experienceYears,
-    education: null,
-    currentCompany: null,
-    designation: null,
-    location: null,
-    summary: `Candidate resume parsed via fallback (AI unavailable). ${skills.length} skills detected.`,
-    resumeScore: Math.min(100, skills.length * 5 + (email ? 20 : 0) + (phone ? 10 : 0)),
-  };
+if (!process.env.XAI_API_KEY) {
+  console.error("[GROK] ❌ XAI_API_KEY not found in environment");
+  throw new Error("XAI_API_KEY not configured");
 }
 
+const client = new OpenAI({
+  apiKey: process.env.XAI_API_KEY,
+  baseURL: "https://api.x.ai/v1",
+});
+console.log(
+  "[GROK] API Key Present:",
+  !!process.env.XAI_API_KEY
+);
+
+console.log(
+  "[GROK] Key Length:",
+  process.env.XAI_API_KEY?.length
+);
+
 /**
- * Service for analyzing resume text using Google Gemini
- * Extracts structured candidate information
+ * Service for analyzing resume text using Grok (xAI)
+ * Parser is the PRIMARY source — AI enhances parser output only.
+ * AI values never overwrite parser values with null.
  */
 export const openaiResumeAnalyzerService = {
   /**
-   * Analyze resume text and extract candidate info using Gemini
-   * Returns structured JSON with candidate details
-   * Falls back to regex parser if Gemini is unavailable
+   * Analyze resume text and extract candidate info
+   * 1. Run primary regex parser first
+   * 2. Optionally enhance with Grok AI
+   * 3. Merge: parser wins, AI fills gaps only
    */
   async analyzeResume(resumeText) {
     try {
@@ -144,238 +40,284 @@ export const openaiResumeAnalyzerService = {
       }
 
       console.log(
-        `[GEMINI] Analyzing resume (${resumeText.length} chars)...`
+        `[GROK] Analyzing resume (${resumeText.length} chars)...`
       );
 
-      // Limit text to prevent token overflow
-      const maxChars = 15000;
-      const truncatedText = resumeText.substring(0, maxChars);
+      // ── Step 1: Dictionary skill detection ──
+      const detectedSkills = ALL_SKILLS.filter(skill =>
+        resumeText.toLowerCase().includes(skill.toLowerCase())
+      );
 
-      const prompt = `You are a professional resume parser. Analyze the following resume and extract key information in JSON format.
+      console.log(
+        `[SKILLS] Dictionary detected ${detectedSkills.length} skills`
+      );
 
-    IMPORTANT: Return ONLY valid JSON (no markdown, no code blocks, no extra text).
+      // ── Step 2: Run primary parser (always) ──
+      const parserResult = fallbackParseResume(resumeText, detectedSkills);
+      console.log(
+        `[PARSER] Primary parser completed: name="${parserResult.name}", email="${parserResult.email}", skills=${parserResult.skills.length}`
+      );
 
-    {
-      "name": "string",
-      "email": "string or null",
-      "phone": "string or null",
-      "skills": ["string"],
-      "experienceYears": number,
-      "education": "string or null",
-      "currentCompany": "string or null",
-      "designation": "string or null",
-      "location": "string or null",
-      "linkedin": "string or null",
-      "github": "string or null",
-      "projects": ["string"],
-      "certifications": ["string"],
-      "summary": "string (2-3 sentences max)",
-      "resumeScore": number,
-      "confidenceScores": {
-        "name": number,
-        "email": number,
-        "phone": number,
-        "skills": number,
-        "experienceYears": number,
-        "education": number,
-        "linkedin": number,
-        "github": number
-      }
-    }
-
-    Resume Text:
-    ${truncatedText}
-
-    Requirements:
-    1. name: Full name of candidate (required, string)
-    2. email: Email address (null if not found)
-    3. phone: Phone number (null if not found)
-    4. skills: Array of technical and professional skills
-    5. experienceYears: Total years of experience (integer, 0 if not found)
-    6. education: Highest degree or education (null if not found)
-    7. currentCompany: Current or last company name (null if not found)
-    8. designation: Current or last job title (null if not found)
-    9. location: City/Country (null if not found)
-    10. linkedin: LinkedIn profile URL (null if not found)
-    11. github: GitHub profile URL (null if not found)
-    12. projects: Array of significant project names/titles
-    13. certifications: Array of certification names
-    14. summary: Brief 2-3 sentence summary of candidate
-    15. resumeScore: Score 0-100 based on completeness (100 = complete, 50 = partial, 0 = minimal)
-    16. confidenceScores: Score 0-100 for each field indicating how confident you are in the extracted value
-
-    Return ONLY the JSON object, nothing else.`;
-
-      console.log("[GEMINI] Prompt prepared for Gemini API");
-      console.log("[GEMINI] Prompt preview:", prompt.slice(0, 500).replace(/\n/g, " "));
-      console.log("[GEMINI] Model selected: gemini-2.0-flash");
-
-      let model;
+      // ── Step 3: Attempt AI enhancement ──
+      let aiAnalysis = null;
       try {
-        model = getGenAI().getGenerativeModel({ model: "gemini-2.0-flash" });
-      } catch (keyError) {
-        console.error("[GEMINI] ❌ Failed to init model:", keyError.message);
-        return fallbackParseResume(resumeText);
-      }
-
-      console.log("[GEMINI] Sending request to Gemini API...");
-      let response;
-      try {
-        response = await model.generateContent(prompt);
+        aiAnalysis = await this._callGrokAPI(resumeText);
       } catch (apiError) {
         console.error(
-          "[GEMINI] ❌ API call failed:",
+          "[GROK] ❌ API call failed:",
           apiError.message
         );
-        console.log("[GEMINI] Falling back to regex parser...");
-        return fallbackParseResume(resumeText);
+        console.log("[GROK] Continuing with parser-only result...");
       }
 
-      let content = "";
-
-      if (typeof response?.response?.text === "function") {
-        content = await response.response.text();
-      } else if (typeof response?.response === "string") {
-        content = response.response;
-      } else if (Array.isArray(response?.output)) {
-        content = response.output
-          .map((item) => {
-            if (typeof item?.content === "string") return item.content;
-            if (Array.isArray(item?.content)) {
-              return item.content.map((c) => c?.text ?? "").join(" ");
-            }
-            return "";
-          })
-          .join(" ");
-      }
-
-      content = String(content ?? "").trim();
-
-      if (!content) {
-        console.error("[GEMINI] ❌ Empty response from API");
-        return fallbackParseResume(resumeText);
-      }
-
-      console.log(
-        `[GEMINI] ✅ Received response (${content.length} chars)`
-      );
-      console.log(
-        `[GEMINI] Response preview: ${content
-          .slice(0, 500)
-          .replace(/\n/g, " ")}`
-      );
-
-      // Clean response - remove markdown code blocks if present
-      let cleanContent = content.trim();
-      if (cleanContent.startsWith("```json")) {
-        cleanContent = cleanContent
-          .replace(/^```json\n?/gi, "")
-          .replace(/\n?```$/gi, "");
-      } else if (cleanContent.startsWith("```")) {
-        cleanContent = cleanContent
-          .replace(/^```\n?/gi, "")
-          .replace(/\n?```$/gi, "");
-      }
-
-      // Try to parse JSON
-      let analysis = {};
-      try {
-        analysis = JSON.parse(cleanContent);
-        console.log("[GEMINI] ✅ JSON parsed successfully");
-      } catch (parseError) {
-        console.warn(
-          "[GEMINI] ⚠️ JSON parse failed, attempting recovery..."
-        );
-        console.warn("[GEMINI] Raw content:", cleanContent.substring(0, 500));
-
-        // Try to extract JSON from the response
-        const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          try {
-            analysis = JSON.parse(jsonMatch[0]);
-            console.log("[GEMINI] ✅ JSON recovered from raw response");
-          } catch (recoveryError) {
-            console.error(
-              "[GEMINI] ❌ JSON recovery also failed, using fallback"
-            );
-            return fallbackParseResume(resumeText);
-          }
-        } else {
-          console.error(
-            "[GEMINI] ❌ No JSON object found in response, using fallback"
-          );
-          return fallbackParseResume(resumeText);
-        }
-      }
-
-      // Normalize and validate data with fallbacks (no crash)
-      const candidateName =
-        (analysis.name && String(analysis.name).trim()) || "Unknown Candidate";
-
-      const result = {
-        name: candidateName,
-        email: analysis.email
-          ? String(analysis.email).toLowerCase().trim()
-          : null,
-        phone: analysis.phone ? String(analysis.phone).trim() : null,
-        skills: Array.isArray(analysis.skills)
-          ? analysis.skills.filter((s) => s)
-          : [],
-        experienceYears: Math.max(0, parseInt(analysis.experienceYears) || 0),
-        education: analysis.education
-          ? String(analysis.education).trim()
-          : null,
-        currentCompany: analysis.currentCompany
-          ? String(analysis.currentCompany).trim()
-          : null,
-        designation: analysis.designation
-          ? String(analysis.designation).trim()
-          : null,
-        location: analysis.location
-          ? String(analysis.location).trim()
-          : null,
-        linkedin: analysis.linkedin
-          ? String(analysis.linkedin).trim()
-          : null,
-        github: analysis.github
-          ? String(analysis.github).trim()
-          : null,
-        projects: Array.isArray(analysis.projects)
-          ? analysis.projects.filter((p) => p)
-          : [],
-        certifications: Array.isArray(analysis.certifications)
-          ? analysis.certifications.filter((c) => c)
-          : [],
-        summary: analysis.summary ? String(analysis.summary).trim() : "",
-        resumeScore: Math.min(
-          100,
-          Math.max(0, parseInt(analysis.resumeScore) || 0)
-        ),
-        confidenceScores: typeof analysis.confidenceScores === 'object' && analysis.confidenceScores !== null
-          ? analysis.confidenceScores
-          : {},
-      };
+      // ── Step 4: Merge — parser is primary, AI fills gaps only ──
+      const result = this._mergeParserAndAI(parserResult, aiAnalysis, detectedSkills);
 
       // Attach metadata for observability
       result._meta = {
-        model: 'gemini-2.0-flash',
-        promptPreview: prompt.slice(0, 500),
-        raw: content,
+        model: aiAnalysis ? 'grok-3-mini' : 'parser-only',
+        parserScore: parserResult.resumeScore,
+        aiAvailable: !!aiAnalysis,
       };
 
       console.log(
-        `[GEMINI] ✅ Candidate: "${result.name}", email: "${result.email}", skills: ${result.skills.length}`
+        `[GROK] ✅ Final: "${result.name}", email: "${result.email}", skills: ${result.skills.length}, score: ${result.resumeScore}`
       );
 
       return result;
     } catch (error) {
-      console.error("[GEMINI] ❌ Resume analysis failed:", error.message);
-      // Last resort - use fallback parser instead of throwing
+      console.error("[GROK] ❌ Resume analysis failed:", error.message);
+      // Last resort — parser only
       try {
-        return fallbackParseResume(resumeText);
+        let fallbackSkills = null;
+        if (typeof ALL_SKILLS !== "undefined") {
+          fallbackSkills = ALL_SKILLS.filter(skill => resumeText.toLowerCase().includes(skill.toLowerCase()));
+        }
+        return fallbackParseResume(resumeText, fallbackSkills);
       } catch (fallbackError) {
         throw new Error(`Resume analysis failed: ${error.message}`);
       }
     }
+  },
+
+  /**
+   * Call Grok API for AI-based resume analysis
+   * @private
+   */
+  async _callGrokAPI(resumeText) {
+    const maxChars = 15000;
+    const truncatedText = resumeText.substring(0, maxChars);
+
+    const prompt = `You are a professional ATS-specific resume parser. Analyze the following resume and extract ONLY the following JSON structure.
+
+    IMPORTANT: Return ONLY valid JSON (no markdown, no code blocks, no extra text).
+    Never hallucinate. Use null when information is missing.
+    Extract all projects. Extract all certifications. Extract all experiences.
+    Confidence scores must be 0-100.
+
+    {
+      "name": "",
+      "email": "",
+      "phone": "",
+      "designation": "",
+      "location": "",
+      "education": [
+        {
+          "degree": "",
+          "specialization": "",
+          "college": "",
+          "year": "",
+          "cgpa": ""
+        }
+      ],
+      "experience": [
+        {
+          "company": "",
+          "role": "",
+          "startDate": "",
+          "endDate": "",
+          "duration": ""
+        }
+      ],
+      "projects": [
+        {
+          "name": "",
+          "description": "",
+          "technologies": []
+        }
+      ],
+      "certifications": [
+        {
+          "name": "",
+          "issuer": ""
+        }
+      ],
+      "summary": "",
+      "linkedin": "",
+      "github": "",
+      "confidenceScores": {}
+    }
+
+    Resume Text:
+    ${truncatedText}
+    `;
+
+    console.log("[GROK] Prompt prepared for Grok API");
+    console.log("[GROK] Prompt preview:", prompt.slice(0, 500).replace(/\n/g, " "));
+    console.log("[GROK] Model selected: grok-3-mini");
+    console.log("[GROK] Sending request to Grok API...");
+
+    const completion = await client.chat.completions.create({
+      model: "grok-3-mini",
+      temperature: 0.1,
+      messages: [
+        {
+          role: "system",
+          content: "You are an ATS resume parser. Return ONLY valid JSON."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ]
+    });
+
+    const content = (completion?.choices?.[0]?.message?.content ?? "").trim();
+
+    if (!content) {
+      console.error("[GROK] ❌ Empty response from API");
+      return null;
+    }
+
+    console.log(
+      `[GROK] ✅ Received response (${content.length} chars)`
+    );
+    console.log(
+      `[GROK] Response preview: ${content
+        .slice(0, 500)
+        .replace(/\n/g, " ")}`
+    );
+
+    // Clean response — remove markdown code blocks if present
+    let cleanContent = content.trim();
+    if (cleanContent.startsWith("```json")) {
+      cleanContent = cleanContent
+        .replace(/^```json\n?/gi, "")
+        .replace(/\n?```$/gi, "");
+    } else if (cleanContent.startsWith("```")) {
+      cleanContent = cleanContent
+        .replace(/^```\n?/gi, "")
+        .replace(/\n?```$/gi, "");
+    }
+
+    // Try to parse JSON
+    try {
+      const analysis = JSON.parse(cleanContent);
+      console.log("[GROK] ✅ JSON parsed successfully");
+      return analysis;
+    } catch (parseError) {
+      console.warn("[GROK] ⚠️ JSON parse failed, attempting recovery...");
+      console.warn("[GROK] Raw content:", cleanContent.substring(0, 500));
+
+      const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          const analysis = JSON.parse(jsonMatch[0]);
+          console.log("[GROK] ✅ JSON recovered from raw response");
+          return analysis;
+        } catch (recoveryError) {
+          console.error("[GROK] ❌ JSON recovery also failed");
+          return null;
+        }
+      }
+
+      console.error("[GROK] ❌ No JSON object found in response");
+      return null;
+    }
+  },
+
+  /**
+   * Merge parser result with AI analysis
+   * RULE: Parser values are primary. AI fills gaps only. AI never overwrites with null.
+   * @private
+   */
+  _mergeParserAndAI(parserResult, aiAnalysis, detectedSkills) {
+    // If no AI result, return parser as-is
+    if (!aiAnalysis) {
+      return parserResult;
+    }
+
+    // Helper: pick parser value if present, else AI value (never overwrite with null)
+    const pick = (parserVal, aiVal) => {
+      if (parserVal !== null && parserVal !== undefined && parserVal !== "Unknown Candidate") {
+        return parserVal;
+      }
+      return aiVal !== null && aiVal !== undefined ? aiVal : parserVal;
+    };
+
+    // Merge skills: union of dictionary + parser + AI skills
+    const mergedSkills = [
+      ...new Set([
+        ...detectedSkills,
+        ...(parserResult.skills || []),
+        ...(Array.isArray(aiAnalysis.skills) ? aiAnalysis.skills : [])
+      ])
+    ];
+
+    // Merge arrays: parser wins if non-empty, else use AI
+    const mergeArray = (parserArr, aiArr) => {
+      if (Array.isArray(parserArr) && parserArr.length > 0) return parserArr;
+      if (Array.isArray(aiArr) && aiArr.length > 0) return aiArr;
+      return parserArr || [];
+    };
+
+    // Education — normalize for toString compat
+    let edu = mergeArray(parserResult.education, aiAnalysis.education);
+    if (Array.isArray(edu) && edu.length > 0) {
+      Object.defineProperty(edu, 'toString', {
+        value: function () {
+          return this.map(e => `${e.degree || ''} ${e.specialization || ''} ${e.college || ''}`).join(', ').trim();
+        },
+        enumerable: false
+      });
+    }
+
+    const result = {
+      name: pick(parserResult.name, aiAnalysis.name ? String(aiAnalysis.name).trim() : null),
+      email: pick(parserResult.email, aiAnalysis.email ? String(aiAnalysis.email).toLowerCase().trim() : null),
+      phone: pick(parserResult.phone, aiAnalysis.phone ? String(aiAnalysis.phone).trim() : null),
+      linkedin: pick(parserResult.linkedin, aiAnalysis.linkedin ? String(aiAnalysis.linkedin).trim() : null),
+      github: pick(parserResult.github, aiAnalysis.github ? String(aiAnalysis.github).trim() : null),
+      location: pick(parserResult.location, aiAnalysis.location ? String(aiAnalysis.location).trim() : null),
+      skills: mergedSkills,
+      inferredSkills: parserResult.inferredSkills || [],
+      experienceYears: Math.max(
+        parserResult.experienceYears || 0,
+        Math.max(0, parseInt(aiAnalysis.experienceYears) || 0)
+      ),
+      experience: mergeArray(parserResult.experience, aiAnalysis.experience),
+      education: edu,
+      projects: mergeArray(parserResult.projects, aiAnalysis.projects),
+      certifications: mergeArray(parserResult.certifications, aiAnalysis.certifications),
+      currentCompany: pick(
+        parserResult.currentCompany,
+        aiAnalysis.currentCompany ? String(aiAnalysis.currentCompany).trim()
+          : (Array.isArray(aiAnalysis.experience) && aiAnalysis.experience.length > 0 ? aiAnalysis.experience[0].company : null)
+      ),
+      designation: pick(parserResult.designation, aiAnalysis.designation ? String(aiAnalysis.designation).trim() : null),
+      summary: pick(parserResult.summary, aiAnalysis.summary ? String(aiAnalysis.summary).trim() : null),
+      resumeScore: Math.max(
+        parserResult.resumeScore || 0,
+        Math.min(100, Math.max(0, parseInt(aiAnalysis.resumeScore) || 0))
+      ),
+      confidenceScores: {
+        ...(parserResult.confidenceScores || {}),
+        ...(typeof aiAnalysis.confidenceScores === 'object' && aiAnalysis.confidenceScores !== null
+          ? aiAnalysis.confidenceScores
+          : {}),
+      },
+    };
+
+    return result;
   },
 };

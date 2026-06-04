@@ -1,16 +1,19 @@
 import { Link, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { ArrowLeft, Award, Briefcase, CalendarCheck, ClipboardList, GraduationCap, History, Mail, Phone, Sparkles } from "lucide-react";
 import { AppShell } from "@/layouts/AppShell";
-import { candidateService, interviewService, taskService } from "@/services";
+import { candidateService, interviewService, taskService, userService, callService } from "@/services";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { format, formatDistanceToNow } from "date-fns";
 
 
 
 export default function CandidateDetailsPage() {
   const { id } = useParams();
+  const qc = useQueryClient();
   const { data, isLoading, error } = useQuery({
     queryKey: ["candidate", id],
     queryFn: () => candidateService.get(id!),
@@ -18,6 +21,78 @@ export default function CandidateDetailsPage() {
   });
   const { data: allInterviews = [] } = useQuery({ queryKey: ["interviews"], queryFn: () => interviewService.list() });
   const { data: allTasks = [] } = useQuery({ queryKey: ["tasks"], queryFn: () => taskService.list() });
+  const { data: users = [] } = useQuery({ queryKey: ["users"], queryFn: () => userService.list() });
+
+  const [isAssignOpen, setIsAssignOpen] = useState(false);
+  const [isCallOpen, setIsCallOpen] = useState(false);
+  const [completeInterviewId, setCompleteInterviewId] = useState<string | null>(null);
+  const [evaluateInterviewId, setEvaluateInterviewId] = useState<string | null>(null);
+  const [submitTaskId, setSubmitTaskId] = useState<string | null>(null);
+  const [reviewTaskId, setReviewTaskId] = useState<string | null>(null);
+  
+  const [selectedHrId, setSelectedHrId] = useState("");
+  const [callData, setCallData] = useState({ outcome: "ANSWERED", interestStatus: "INTERESTED", note: "" });
+  const [completeData, setCompleteData] = useState({ feedback: "", rating: 5 });
+  const [evaluateData, setEvaluateData] = useState({ decision: "SELECT", reason: "" });
+  const [submitData, setSubmitData] = useState({ submissionLink: "" });
+  const [reviewData, setReviewData] = useState({ outcome: "SATISFIED", reviewNotes: "", score: 100, reason: "", newDeadline: "" });
+
+  const assignMutation = useMutation({
+    mutationFn: (hrId: string) => candidateService.assign(id!, hrId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["candidate", id] });
+      setIsAssignOpen(false);
+    },
+  });
+
+  const callMutation = useMutation({
+    mutationFn: (data: any) => callService.create({ candidateId: id!, ...data }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["candidate", id] });
+      setIsCallOpen(false);
+      setCallData({ outcome: "ANSWERED", interestStatus: "INTERESTED", note: "" });
+    },
+  });
+
+  const completeMutation = useMutation({
+    mutationFn: (data: any) => interviewService.complete(completeInterviewId!, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["interviews"] });
+      qc.invalidateQueries({ queryKey: ["candidate", id] });
+      setCompleteInterviewId(null);
+      setCompleteData({ feedback: "", rating: 5 });
+    },
+  });
+
+  const evaluateMutation = useMutation({
+    mutationFn: (data: any) => interviewService.evaluate(evaluateInterviewId!, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["interviews"] });
+      qc.invalidateQueries({ queryKey: ["candidate", id] });
+      setEvaluateInterviewId(null);
+      setEvaluateData({ decision: "SELECT", reason: "" });
+    },
+  });
+
+  const submitTaskMutation = useMutation({
+    mutationFn: (data: any) => taskService.submit(submitTaskId!, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["candidate", id] });
+      setSubmitTaskId(null);
+      setSubmitData({ submissionLink: "" });
+    },
+  });
+
+  const reviewTaskMutation = useMutation({
+    mutationFn: (data: any) => taskService.review(reviewTaskId!, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["candidate", id] });
+      setReviewTaskId(null);
+      setReviewData({ outcome: "SATISFIED", reviewNotes: "", score: 100, reason: "", newDeadline: "" });
+    },
+  });
 
   if (isLoading) return <div className="grid h-60 place-items-center"><div className="size-8 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>;
   if (error || !data) return <p className="text-sm text-destructive">Could not load candidate.</p>;
@@ -57,9 +132,29 @@ export default function CandidateDetailsPage() {
               <span className="inline-flex items-center gap-1.5"><Briefcase className="size-3.5" />{candidate?.category ?? "General"}</span>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button className="rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium hover:bg-muted">Send email</button>
-            <button className="rounded-lg gradient-primary px-3.5 py-2 text-sm font-medium text-primary-foreground shadow-glow hover:opacity-95">Schedule interview</button>
+          <div className="flex flex-col items-end justify-between gap-3 sm:flex-col sm:items-end">
+            <div className="flex flex-wrap items-center gap-2">
+              <button 
+                onClick={() => setIsAssignOpen(true)}
+                className="rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium hover:bg-muted"
+              >
+                Assign HR
+              </button>
+              <button 
+                onClick={() => setIsCallOpen(true)}
+                className="rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium hover:bg-muted"
+              >
+                Log Call
+              </button>
+              <button className="rounded-lg gradient-primary px-3.5 py-2 text-sm font-medium text-primary-foreground shadow-glow hover:opacity-95">
+                Schedule interview
+              </button>
+            </div>
+            {candidate?.assignedTo && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Assigned to: <span className="font-medium text-foreground">{candidate.assignedTo}</span>
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -228,13 +323,25 @@ export default function CandidateDetailsPage() {
           <div className="card-elevated divide-y divide-border">
             {candidateInterviews.length === 0 && <p className="p-6 text-sm text-muted-foreground">No interviews yet.</p>}
             {candidateInterviews.map((i) => (
-              <div key={i.id} className="flex items-center gap-3 p-4">
-                <div className="grid size-10 place-items-center rounded-lg bg-primary/10 text-primary"><CalendarCheck className="size-4" /></div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground">{i.interviewType} interview with {i.interviewerName}</p>
-                  <p className="text-xs text-muted-foreground">{i.scheduledAt ? format(new Date(i.scheduledAt), "EEEE, MMM d • p") : "—"}</p>
+              <div key={i.id} className="flex items-center justify-between gap-3 p-4">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><CalendarCheck className="size-4" /></div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-foreground">{i.interviewType} interview with {i.interviewerName}</p>
+                    <p className="text-xs text-muted-foreground">{i.scheduledAt ? format(new Date(i.scheduledAt), "EEEE, MMM d • p") : "—"}</p>
+                  </div>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-xs mr-4">{i.status}</span>
                 </div>
-                <span className="rounded-full bg-muted px-2 py-0.5 text-xs">{i.status}</span>
+                {i.status === "SCHEDULED" && (
+                  <button onClick={() => setCompleteInterviewId(i.id)} className="shrink-0 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium hover:bg-muted">
+                    Complete
+                  </button>
+                )}
+                {i.status === "COMPLETED" && (
+                  <button onClick={() => setEvaluateInterviewId(i.id)} className="shrink-0 rounded-lg gradient-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-glow hover:opacity-95">
+                    Evaluate
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -244,18 +351,350 @@ export default function CandidateDetailsPage() {
           <div className="card-elevated divide-y divide-border">
             {candidateTasks.length === 0 && <p className="p-6 text-sm text-muted-foreground">No tasks for this candidate.</p>}
             {candidateTasks.map((t) => (
-              <div key={t.id} className="flex items-center gap-3 p-4">
-                <History className="size-4 text-muted-foreground" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground">{t.title}</p>
-                  <p className="text-xs text-muted-foreground">Due {t.dueDate ? format(new Date(t.dueDate), "MMM d") : "—"} • {t.assigneeName}</p>
+              <div key={t.id} className="flex items-center justify-between gap-3 p-4">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <History className="size-4 text-muted-foreground shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-foreground">{t.title}</p>
+                    <p className="text-xs text-muted-foreground">Due {t.dueDate ? format(new Date(t.dueDate), "MMM d") : "—"} • {t.assigneeName}</p>
+                  </div>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-xs mr-4">{t.status}</span>
                 </div>
-                <span className="rounded-full bg-muted px-2 py-0.5 text-xs">{t.status}</span>
+                {t.status === "ASSIGNED" && (
+                  <button onClick={() => setSubmitTaskId(t.id)} className="shrink-0 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium hover:bg-muted">
+                    Submit Link
+                  </button>
+                )}
+                {t.status === "SUBMITTED" && (
+                  <button onClick={() => setReviewTaskId(t.id)} className="shrink-0 rounded-lg gradient-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-glow hover:opacity-95">
+                    Review Task
+                  </button>
+                )}
               </div>
             ))}
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Assign HR Dialog */}
+      <Dialog open={isAssignOpen} onOpenChange={setIsAssignOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign HR</DialogTitle>
+            <DialogDescription>Select an HR representative to assign to this candidate.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <select
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={selectedHrId}
+              onChange={(e) => setSelectedHrId(e.target.value)}
+            >
+              <option value="">Select HR...</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
+              ))}
+            </select>
+          </div>
+          <DialogFooter>
+            <button 
+              onClick={() => setIsAssignOpen(false)}
+              className="rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+            >
+              Cancel
+            </button>
+            <button 
+              onClick={() => assignMutation.mutate(selectedHrId)}
+              disabled={!selectedHrId || assignMutation.isPending}
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {assignMutation.isPending ? "Assigning..." : "Assign"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Log Call Dialog */}
+      <Dialog open={isCallOpen} onOpenChange={setIsCallOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Log a Call</DialogTitle>
+            <DialogDescription>Record the outcome of your call with {candidate?.name}.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Outcome</label>
+              <select 
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={callData.outcome}
+                onChange={(e) => setCallData({ ...callData, outcome: e.target.value })}
+              >
+                <option value="ANSWERED">Answered</option>
+                <option value="NOT_PICKED">Not Picked</option>
+                <option value="BUSY">Busy</option>
+              </select>
+            </div>
+            
+            {callData.outcome === "ANSWERED" && (
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Interest Status</label>
+                <select 
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={callData.interestStatus}
+                  onChange={(e) => setCallData({ ...callData, interestStatus: e.target.value })}
+                >
+                  <option value="INTERESTED">Interested</option>
+                  <option value="NOT_INTERESTED">Not Interested</option>
+                  <option value="NEEDS_FOLLOW_UP">Needs Follow Up</option>
+                </select>
+              </div>
+            )}
+            
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Notes (optional)</label>
+              <textarea 
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                rows={3}
+                placeholder="Any important details from the call..."
+                value={callData.note}
+                onChange={(e) => setCallData({ ...callData, note: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <button 
+              onClick={() => setIsCallOpen(false)}
+              className="rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+            >
+              Cancel
+            </button>
+            <button 
+              onClick={() => callMutation.mutate(callData)}
+              disabled={callMutation.isPending}
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {callMutation.isPending ? "Logging..." : "Log Call"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Complete Interview Dialog */}
+      <Dialog open={!!completeInterviewId} onOpenChange={(open) => !open && setCompleteInterviewId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Complete Interview</DialogTitle>
+            <DialogDescription>Record the feedback and rating for this interview.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Rating (1-10)</label>
+              <input 
+                type="number" min="1" max="10"
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={completeData.rating}
+                onChange={(e) => setCompleteData({ ...completeData, rating: parseInt(e.target.value) || 5 })}
+              />
+            </div>
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Feedback Notes</label>
+              <textarea 
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                rows={4}
+                placeholder="Technical skills, communication, culture fit..."
+                value={completeData.feedback}
+                onChange={(e) => setCompleteData({ ...completeData, feedback: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <button 
+              onClick={() => setCompleteInterviewId(null)}
+              className="rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+            >
+              Cancel
+            </button>
+            <button 
+              onClick={() => completeMutation.mutate(completeData)}
+              disabled={completeMutation.isPending || !completeData.feedback}
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {completeMutation.isPending ? "Completing..." : "Complete Interview"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Evaluate Interview Dialog */}
+      <Dialog open={!!evaluateInterviewId} onOpenChange={(open) => !open && setEvaluateInterviewId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Evaluate Interview</DialogTitle>
+            <DialogDescription>Make a decision based on the interview outcome.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Decision</label>
+              <select 
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={evaluateData.decision}
+                onChange={(e) => setEvaluateData({ ...evaluateData, decision: e.target.value })}
+              >
+                <option value="SELECT">Select candidate</option>
+                <option value="TASK">Assign Task</option>
+                <option value="DROP">Drop candidate</option>
+              </select>
+            </div>
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Reason / Justification</label>
+              <textarea 
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                rows={3}
+                placeholder="Why was this decision made?"
+                value={evaluateData.reason}
+                onChange={(e) => setEvaluateData({ ...evaluateData, reason: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <button 
+              onClick={() => setEvaluateInterviewId(null)}
+              className="rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+            >
+              Cancel
+            </button>
+            <button 
+              onClick={() => evaluateMutation.mutate(evaluateData)}
+              disabled={evaluateMutation.isPending}
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {evaluateMutation.isPending ? "Submitting..." : "Submit Evaluation"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Submit Task Dialog */}
+      <Dialog open={!!submitTaskId} onOpenChange={(open) => !open && setSubmitTaskId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Submit Task</DialogTitle>
+            <DialogDescription>Submit the candidate's completed work link.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Submission Link</label>
+              <input 
+                type="url"
+                placeholder="https://github.com/... or Google Drive link"
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={submitData.submissionLink}
+                onChange={(e) => setSubmitData({ ...submitData, submissionLink: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <button 
+              onClick={() => setSubmitTaskId(null)}
+              className="rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+            >
+              Cancel
+            </button>
+            <button 
+              onClick={() => submitTaskMutation.mutate(submitData)}
+              disabled={submitTaskMutation.isPending || !submitData.submissionLink}
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {submitTaskMutation.isPending ? "Submitting..." : "Submit Task"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Review Task Dialog */}
+      <Dialog open={!!reviewTaskId} onOpenChange={(open) => !open && setReviewTaskId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Review Task</DialogTitle>
+            <DialogDescription>Evaluate the candidate's submitted work.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Outcome</label>
+              <select 
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={reviewData.outcome}
+                onChange={(e) => setReviewData({ ...reviewData, outcome: e.target.value })}
+              >
+                <option value="SATISFIED">Satisfied (Pass)</option>
+                <option value="NEEDS_IMPROVEMENT">Needs Improvement (Rework)</option>
+                <option value="FAILED">Failed (Drop)</option>
+              </select>
+            </div>
+            
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Score (0-100)</label>
+              <input 
+                type="number" min="0" max="100"
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={reviewData.score}
+                onChange={(e) => setReviewData({ ...reviewData, score: parseInt(e.target.value) || 0 })}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Review Notes</label>
+              <textarea 
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                rows={3}
+                placeholder="Detailed feedback..."
+                value={reviewData.reviewNotes}
+                onChange={(e) => setReviewData({ ...reviewData, reviewNotes: e.target.value })}
+              />
+            </div>
+
+            {reviewData.outcome !== "SATISFIED" && (
+              <div className="grid gap-2 border-t pt-4">
+                <label className="text-sm font-medium text-destructive">
+                  {reviewData.outcome === "FAILED" ? "Reason for Drop" : "Reason for Rework"}
+                </label>
+                <input 
+                  type="text"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={reviewData.reason}
+                  onChange={(e) => setReviewData({ ...reviewData, reason: e.target.value })}
+                />
+              </div>
+            )}
+            
+            {reviewData.outcome === "NEEDS_IMPROVEMENT" && (
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">New Deadline</label>
+                <input 
+                  type="datetime-local"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={reviewData.newDeadline}
+                  onChange={(e) => setReviewData({ ...reviewData, newDeadline: e.target.value })}
+                />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <button 
+              onClick={() => setReviewTaskId(null)}
+              className="rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+            >
+              Cancel
+            </button>
+            <button 
+              onClick={() => reviewTaskMutation.mutate(reviewData)}
+              disabled={reviewTaskMutation.isPending || (reviewData.outcome === "NEEDS_IMPROVEMENT" && !reviewData.newDeadline)}
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {reviewTaskMutation.isPending ? "Submitting..." : "Submit Review"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

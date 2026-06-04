@@ -14,6 +14,18 @@ import * as controller from "./task.controller.js";
 const router =
   express.Router();
 
+router.get(
+  "/",
+  protect,
+  controller.listTasks
+);
+
+router.get(
+  "/:id",
+  protect,
+  controller.getTask
+);
+
 router.post(
   "/",
   protect,

@@ -32,7 +32,15 @@ const createSchema = z.object({
 });
 type CreateForm = z.infer<typeof createSchema>;
 
-const STATUS_FILTERS: ("ALL" | CandidateStatus)[] = ["ALL", "NEW", "CONTACTED", "INTERVIEW", "SELECTED", "DROPPED", "ON_HOLD"];
+const STATUS_FILTERS: ("ALL" | CandidateStatus)[] = [
+  "ALL", "NEW", "AI_PROCESSING", "AI_PROCESSED",
+  "FIRST_CALL_PENDING", "FIRST_CALL_DONE",
+  "SECOND_CALL_PENDING", "SECOND_CALL_DONE",
+  "THIRD_CALL_PENDING", "THIRD_CALL_DONE",
+  "INTERVIEW_SCHEDULED", "INTERVIEW_COMPLETED",
+  "TASK_ASSIGNED", "TASK_REVIEW",
+  "SELECTED", "DROPPED",
+];
 
 export default function CandidatesPage() {
   const qc = useQueryClient();

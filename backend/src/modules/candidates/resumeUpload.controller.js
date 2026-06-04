@@ -93,7 +93,7 @@ export const uploadResumes = asyncHandler(async (req, res) => {
       const safeEmail = analysis.email
         ? analysis.email.toLowerCase().trim()
         : `unknown-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
-      const safePhone = analysis.phone?.trim() || "000-000-0000";
+      const safePhone = analysis.phone?.trim() || null;
 
       console.log(
         `[UPLOAD] Resolved candidate info: ${safeName}, ${safeEmail}, ${safePhone}`

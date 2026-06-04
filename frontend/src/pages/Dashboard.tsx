@@ -1,7 +1,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import {
-  Activity, CalendarCheck, CheckCircle2, ChevronRight, ListChecks, TrendingUp, UserPlus, Users, XCircle,
+  Activity, CalendarCheck, CheckCircle2, ChevronRight, ClipboardCheck, ListChecks, Phone, TrendingUp, UserPlus, Users, XCircle,
 } from "lucide-react";
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -9,7 +9,7 @@ import {
 import { AppShell } from "@/layouts/AppShell";
 import { PageHeader } from "@/components/PageHeader";
 import { DashboardCard } from "@/components/DashboardCard";
-import { candidateService, dashboardService, interviewService, reportService, taskService } from "@/services";
+import { activityService, candidateService, dashboardService, interviewService, reportService, taskService } from "@/services";
 import { StatusBadge } from "@/components/StatusBadge";
 import { format, formatDistanceToNow } from "date-fns";
 import { Link } from "react-router-dom";
@@ -25,17 +25,25 @@ export default function DashboardPage() {
   const { data: tasks = [] } = useQuery({ queryKey: ["tasks"], queryFn: () => taskService.list() });
   const { data: reports } = useQuery({ queryKey: ["reports"], queryFn: () => reportService.get() });
 
+  const callStatuses = ["FIRST_CALL_PENDING", "FIRST_CALL_DONE", "SECOND_CALL_PENDING", "SECOND_CALL_DONE", "THIRD_CALL_PENDING", "THIRD_CALL_DONE"];
+  const interviewStatuses = ["INTERVIEW_SCHEDULED", "INTERVIEW_COMPLETED"];
+  const taskStatuses = ["TASK_ASSIGNED", "TASK_REVIEW"];
+
   const funnel = [
     { stage: "Applied", count: candidates.length },
-    { stage: "Contacted", count: candidates.filter((c) => c.status === "CONTACTED").length + candidates.filter((c) => c.status !== "NEW").length },
-    { stage: "Interview", count: candidates.filter((c) => c.status === "INTERVIEW" || c.status === "SELECTED").length },
+    { stage: "Calling", count: candidates.filter((c) => callStatuses.includes(c.status)).length },
+    { stage: "Interview", count: candidates.filter((c) => interviewStatuses.includes(c.status) || c.status === "SELECTED").length },
     { stage: "Selected", count: candidates.filter((c) => c.status === "SELECTED").length },
   ];
 
-  const distribution = ["NEW", "CONTACTED", "INTERVIEW", "SELECTED", "DROPPED", "ON_HOLD"].map((s) => ({
-    name: s,
-    value: candidates.filter((c) => c.status === s).length,
-  }));
+  const distribution = [
+    { name: "New", value: candidates.filter((c) => ["NEW", "AI_PROCESSING", "AI_PROCESSED"].includes(c.status)).length },
+    { name: "Calling", value: candidates.filter((c) => callStatuses.includes(c.status)).length },
+    { name: "Interview", value: candidates.filter((c) => interviewStatuses.includes(c.status)).length },
+    { name: "Task", value: candidates.filter((c) => taskStatuses.includes(c.status)).length },
+    { name: "Selected", value: candidates.filter((c) => c.status === "SELECTED").length },
+    { name: "Dropped", value: candidates.filter((c) => c.status === "DROPPED").length },
+  ];
 
   const upcomingInterviews = interviews
     .filter((i) => i.status === "SCHEDULED")
@@ -43,7 +51,7 @@ export default function DashboardPage() {
     .slice(0, 4);
 
   const dueTasks = tasks
-    .filter((t) => t.status !== "DONE")
+    .filter((t) => t.status !== "PASSED" && t.status !== "FAILED")
     .sort((a, b) => +new Date(a.dueDate) - +new Date(b.dueDate))
     .slice(0, 4);
 
@@ -56,12 +64,12 @@ export default function DashboardPage() {
         description="Real-time pulse of your pipeline, team activity, and upcoming work."
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <DashboardCard label="Total Candidates" value={stats?.totalCandidates ?? "—"} icon={<Users className="size-5" />} trend={12} accent="primary" />
-        <DashboardCard label="Contacted" value={stats?.contactedCandidates ?? "—"} icon={<UserPlus className="size-5" />} trend={4} accent="info" />
+        <DashboardCard label="Calls Pending" value={(stats?.firstCallPending ?? 0) + (stats?.secondCallPending ?? 0) + (stats?.thirdCallPending ?? 0)} icon={<Phone className="size-5" />} trend={4} accent="info" />
+        <DashboardCard label="Interviews Today" value={stats?.interviewsToday ?? "—"} icon={<CalendarCheck className="size-5" />} accent="accent" />
         <DashboardCard label="Selected" value={stats?.selectedCandidates ?? "—"} icon={<CheckCircle2 className="size-5" />} trend={8} accent="success" />
-        <DashboardCard label="Dropped" value={stats?.droppedCandidates ?? "—"} icon={<XCircle className="size-5" />} trend={-3} accent="danger" />
-        <DashboardCard label="Follow-ups Today" value={stats?.followUpsToday ?? "—"} icon={<CalendarCheck className="size-5" />} trend={2} accent="accent" />
+        <DashboardCard label="Tasks to Review" value={stats?.tasksToReview ?? "—"} icon={<ClipboardCheck className="size-5" />} accent="primary" />
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">

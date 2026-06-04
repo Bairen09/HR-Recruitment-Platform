@@ -14,6 +14,18 @@ import * as controller from "./interview.controller.js";
 const router =
   express.Router();
 
+router.get(
+  "/",
+  protect,
+  controller.listInterviews
+);
+
+router.get(
+  "/:id",
+  protect,
+  controller.getInterview
+);
+
 router.post(
   "/",
   protect,

@@ -18,7 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 const schema = z.object({
   candidateId: z.string().min(1, "Choose a candidate"),
   interviewerName: z.string().min(2, "Interviewer name is required"),
-  interviewType: z.enum(["PHONE", "VIDEO", "ONSITE", "TECHNICAL", "HR"]),
+  interviewType: z.enum(["HR", "TECHNICAL", "MANAGERIAL", "FINAL"]),
   scheduledAt: z.string().min(1, "Date is required"),
 });
 type Form = z.infer<typeof schema>;
@@ -35,7 +35,7 @@ export default function InterviewsPage() {
 
   const form = useForm<Form>({
     resolver: zodResolver(schema),
-    defaultValues: { candidateId: "", interviewerName: "", interviewType: "VIDEO", scheduledAt: "" },
+    defaultValues: { candidateId: "", interviewerName: "", interviewType: "TECHNICAL", scheduledAt: "" },
   });
 
   const create = useMutation({
@@ -94,7 +94,7 @@ export default function InterviewsPage() {
               <div>
                 <label className="mb-1.5 block text-sm font-medium">Type</label>
                 <select {...form.register("interviewType")} className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm">
-                  {["PHONE", "VIDEO", "ONSITE", "TECHNICAL", "HR"].map((t) => <option key={t}>{t}</option>)}
+                  {["HR", "TECHNICAL", "MANAGERIAL", "FINAL"].map((t) => <option key={t}>{t}</option>)}
                 </select>
               </div>
               <div>

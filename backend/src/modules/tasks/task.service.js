@@ -18,6 +18,27 @@ import {
   TIMELINE_EVENTS,
 } from "../../constants/timelineEvents.js";
 
+export const listTasks =
+  async () => {
+    return Task.find()
+      .populate("candidateId", "name email code")
+      .populate("assignedBy", "name email")
+      .sort({ createdAt: -1 });
+  };
+
+export const getTask =
+  async (taskId) => {
+    const task = await Task.findById(taskId)
+      .populate("candidateId", "name email code")
+      .populate("assignedBy", "name email");
+
+    if (!task) {
+      throw new AppError("Task not found", 404);
+    }
+
+    return task;
+  };
+
 export const createTask =
   async (
     payload,

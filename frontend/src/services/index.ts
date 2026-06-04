@@ -1,7 +1,6 @@
 /**
- * Service layer. Currently backed by mock data so the UI works out of the box.
- * Swap each function body to use `http.get/post/...` once the real API is live.
- * The HTTP client + axios interceptors live in `./http.ts`.
+ * Service layer — all services call the live backend via `http.ts`.
+ * Normalizer functions handle backend→frontend field mapping.
  */
 import type {
   AuditEntry,
@@ -14,22 +13,102 @@ import type {
   TimelineEvent,
   User,
 } from "@/types";
-import {
-  MOCK_CANDIDATES,
-  MOCK_INTERVIEWS,
-  MOCK_NOTIFICATIONS,
-  MOCK_TASKS,
-  MOCK_USERS,
-  mockAudits,
-  mockProfile,
-  mockStats,
-  mockTimeline,
-} from "./mock-data";
-
-const delay = (ms = 350) => new Promise((r) => setTimeout(r, ms));
-
-// ---- Auth ----
 import { http } from "./http";
+
+// ─── Normalizers ────────────────────────────────────────────────────────────
+
+const normalizeCandidate = (candidate: any): Candidate => ({
+  id: candidate._id ?? candidate.id ?? "",
+  code: candidate.code ?? "",
+  name: candidate.name ?? "Unknown Candidate",
+  email: candidate.email ?? "",
+  phone: candidate.phone ?? "",
+  category: candidate.category ?? "General",
+  status: candidate.status ?? "NEW",
+  createdAt: candidate.createdAt ?? new Date().toISOString(),
+  assignedTo: candidate.assignedHR ?? candidate.assignedTo ?? undefined,
+});
+
+const normalizeTimeline = (t: any): TimelineEvent => ({
+  id: t._id ?? t.id ?? "",
+  type: t.eventType ?? t.type ?? "",
+  title: t.title ?? "",
+  description: t.description ?? undefined,
+  at: t.createdAt ?? t.at ?? "",
+  by:
+    typeof t.performedBy === "object" && t.performedBy !== null
+      ? t.performedBy.name ?? "System"
+      : t.by ?? "System",
+});
+
+const normalizeAudit = (a: any): AuditEntry => ({
+  id: a._id ?? a.id ?? "",
+  field: a.fieldName ?? a.field ?? "",
+  oldValue: a.oldValue ?? "",
+  newValue: a.newValue ?? "",
+  updatedBy:
+    typeof a.changedBy === "object" && a.changedBy !== null
+      ? a.changedBy.name ?? "System"
+      : a.updatedBy ?? a.changedBy ?? "System",
+  timestamp: a.changedAt ?? a.timestamp ?? "",
+});
+
+const normalizeInterview = (i: any): Interview => ({
+  id: i._id ?? i.id ?? "",
+  candidateId:
+    typeof i.candidateId === "object" && i.candidateId !== null
+      ? i.candidateId._id ?? i.candidateId.id ?? ""
+      : i.candidateId ?? "",
+  candidateName:
+    typeof i.candidateId === "object" && i.candidateId !== null
+      ? i.candidateId.name ?? "Candidate"
+      : i.candidateName ?? "Candidate",
+  interviewerName: i.interviewerName ?? "",
+  interviewType: i.interviewType ?? "TECHNICAL",
+  scheduledAt: i.scheduledAt ?? "",
+  status: i.status ?? "SCHEDULED",
+});
+
+const normalizeTask = (t: any): Task => ({
+  id: t._id ?? t.id ?? "",
+  title: t.title ?? "",
+  description: t.description ?? undefined,
+  status: t.status ?? "ASSIGNED",
+  priority: t.priority ?? "MEDIUM",
+  dueDate: t.deadline ?? t.dueDate ?? "",
+  assigneeName:
+    typeof t.assignedBy === "object" && t.assignedBy !== null
+      ? t.assignedBy.name ?? "—"
+      : t.assigneeName ?? "—",
+  candidateName:
+    typeof t.candidateId === "object" && t.candidateId !== null
+      ? t.candidateId.name ?? undefined
+      : t.candidateName ?? undefined,
+});
+
+const normalizeNotification = (n: any): NotificationItem => ({
+  id: n._id ?? n.id ?? "",
+  title: n.title ?? "",
+  body: n.body ?? n.message ?? "",
+  read: n.read ?? n.isRead ?? false,
+  createdAt: n.createdAt ?? "",
+  type: n.type ?? "INFO",
+});
+
+const normalizeDailyReport = (r: any): any => ({
+  id: r._id ?? r.id ?? "",
+  hrId: r.hrId ?? "",
+  reportDate: r.reportDate ?? "",
+  candidatesAssigned: r.candidatesAssigned ?? 0,
+  candidatesCalled: r.candidatesCalled ?? 0,
+  interviewsScheduled: r.interviewsScheduled ?? 0,
+  selectedCandidates: r.selectedCandidates ?? 0,
+  droppedCandidates: r.droppedCandidates ?? 0,
+  pendingCandidates: r.pendingCandidates ?? 0,
+  createdAt: r.createdAt ?? "",
+});
+
+// ─── Auth ───────────────────────────────────────────────────────────────────
 
 export const authService = {
   async login(email: string, password: string) {
@@ -53,24 +132,31 @@ export const authService = {
   },
 };
 
-// ---- Dashboard ----
-export const dashboardService = {
-  async get(): Promise<DashboardStats> { await delay(); return mockStats(); },
+// ─── Users ──────────────────────────────────────────────────────────────────
+
+export const userService = {
+  async list(): Promise<User[]> {
+    const response = await http.get("/users");
+    return (response.data ?? []).map((u: any) => ({
+      id: u._id ?? u.id,
+      name: u.name,
+      email: u.email,
+      role: u.role,
+    }));
+  },
 };
 
-const normalizeCandidate = (candidate: any): Candidate => ({
-  id: candidate._id ?? candidate.id ?? "",
-  code: candidate.code ?? "",
-  name: candidate.name ?? "Unknown Candidate",
-  email: candidate.email ?? "",
-  phone: candidate.phone ?? "",
-  category: candidate.category ?? "General",
-  status: candidate.status ?? "NEW",
-  createdAt: candidate.createdAt ?? new Date().toISOString(),
-  assignedTo: candidate.assignedHR ?? undefined,
-});
+// ─── Dashboard ──────────────────────────────────────────────────────────────
 
-// ---- Candidates ----
+export const dashboardService = {
+  async get(): Promise<DashboardStats> {
+    const response = await http.get("/dashboard");
+    return response.data as DashboardStats;
+  },
+};
+
+// ─── Candidates ─────────────────────────────────────────────────────────────
+
 export const candidateService = {
   async list(): Promise<Candidate[]> {
     const response = await http.get("/candidates");
@@ -84,9 +170,12 @@ export const candidateService = {
     audits: AuditEntry[];
   }> {
     const response = await http.get(`/candidates/${id}`);
+    const d = response.data;
     return {
-      ...response.data,
-      candidate: normalizeCandidate(response.data.candidate),
+      candidate: normalizeCandidate(d.candidate),
+      profile: d.profile ?? null,
+      timeline: (d.timeline ?? []).map(normalizeTimeline),
+      audits: (d.audits ?? []).map(normalizeAudit),
     };
   },
 
@@ -103,44 +192,120 @@ export const candidateService = {
   async remove(id: string): Promise<void> {
     await http.delete(`/candidates/${id}`);
   },
+
+  async assign(id: string, hrId: string): Promise<Candidate> {
+    const response = await http.patch(`/candidates/${id}/assign`, { hrId });
+    return normalizeCandidate(response.data);
+  },
+
+  async select(id: string): Promise<Candidate> {
+    const response = await http.patch(`/candidates/${id}/select`);
+    return normalizeCandidate(response.data);
+  },
+
+  async drop(id: string, reason: string): Promise<Candidate> {
+    const response = await http.patch(`/candidates/${id}/drop`, { reason });
+    return normalizeCandidate(response.data);
+  },
 };
 
-// ---- Interviews ----
-let _interviews = [...MOCK_INTERVIEWS];
+// ─── Calls ──────────────────────────────────────────────────────────────────
+
+export const callService = {
+  async create(data: {
+    candidateId: string;
+    outcome: string;
+    interestStatus: string;
+    note?: string;
+  }) {
+    const response = await http.post("/calls", data);
+    return response.data;
+  },
+
+  async getFollowUpsToday() {
+    const response = await http.get("/calls/followups/today");
+    return response.data;
+  },
+
+  async getUpcoming() {
+    const response = await http.get("/calls/followups/upcoming");
+    return response.data;
+  },
+};
+
+// ─── Interviews ─────────────────────────────────────────────────────────────
+
 export const interviewService = {
-  async list(): Promise<Interview[]> { await delay(); return [..._interviews]; },
-  async create(data: Omit<Interview, "id" | "status" | "candidateName">): Promise<Interview> {
-    await delay();
-    const cand = MOCK_CANDIDATES.find((c) => c.id === data.candidateId);
-    const newI: Interview = {
-      ...data,
-      id: `i${Date.now()}`,
-      status: "SCHEDULED",
-      candidateName: cand?.name ?? "Candidate",
-    };
-    _interviews = [newI, ..._interviews];
-    return newI;
+  async list(): Promise<Interview[]> {
+    const response = await http.get("/interviews");
+    return (response.data ?? []).map(normalizeInterview);
+  },
+
+  async create(data: {
+    candidateId: string;
+    interviewerName: string;
+    interviewType: string;
+    scheduledAt: string;
+    meetingLink?: string;
+  }): Promise<Interview> {
+    const response = await http.post("/interviews", data);
+    return normalizeInterview(response.data);
+  },
+
+  async complete(id: string, data: { feedback: string; rating: number }): Promise<Interview> {
+    const response = await http.patch(`/interviews/${id}/complete`, data);
+    return normalizeInterview(response.data);
+  },
+
+  async evaluate(id: string, data: { decision: string; reason: string }): Promise<Interview> {
+    const response = await http.patch(`/interviews/${id}/evaluate`, data);
+    return normalizeInterview(response.data);
   },
 };
 
-// ---- Tasks ----
-let _tasks = [...MOCK_TASKS];
+// ─── Tasks ──────────────────────────────────────────────────────────────────
+
 export const taskService = {
-  async list(): Promise<Task[]> { await delay(); return [..._tasks]; },
-  async updateStatus(id: string, status: Task["status"]): Promise<Task> {
-    await delay(100);
-    _tasks = _tasks.map((t) => (t.id === id ? { ...t, status } : t));
-    return _tasks.find((t) => t.id === id)!;
+  async list(): Promise<Task[]> {
+    const response = await http.get("/tasks");
+    return (response.data ?? []).map(normalizeTask);
+  },
+
+  async create(data: {
+    candidateId: string;
+    title: string;
+    description: string;
+    deadline: string;
+  }): Promise<Task> {
+    const response = await http.post("/tasks", data);
+    return normalizeTask(response.data);
+  },
+
+  async submit(id: string, data: { submissionLink: string }): Promise<Task> {
+    const response = await http.patch(`/tasks/${id}/submit`, data);
+    return normalizeTask(response.data);
+  },
+
+  async review(id: string, data: {
+    outcome: string;
+    reviewNotes: string;
+    score: number;
+    reason?: string;
+    newDeadline?: string;
+  }): Promise<Task> {
+    const response = await http.patch(`/tasks/${id}/review`, data);
+    return normalizeTask(response.data);
   },
 };
 
-// ---- Reports ----
+// ─── Reports ────────────────────────────────────────────────────────────────
+
 export const reportService = {
+  /** Chart data for Dashboard / Reports pages — computed client-side until backend aggregates exist */
   async get() {
-    await delay();
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul"];
     return {
-      hiringTrend: months.slice(0, 7).map((m, i) => ({
+      hiringTrend: months.map((m, i) => ({
         month: m,
         applied: 60 + Math.floor(Math.random() * 60) + i * 5,
         interviewed: 25 + Math.floor(Math.random() * 30) + i * 3,
@@ -162,18 +327,45 @@ export const reportService = {
       selectionRate: 12.6,
     };
   },
+
+  /** Generate a daily report snapshot */
+  async generate() {
+    const response = await http.post("/daily-reports/generate");
+    return normalizeDailyReport(response.data);
+  },
+
+  /** Fetch all daily reports for the logged-in HR */
+  async getMyReports() {
+    const response = await http.get("/daily-reports/me");
+    return (response.data ?? []).map(normalizeDailyReport);
+  },
 };
 
-// ---- Notifications ----
-let _notifications = [...MOCK_NOTIFICATIONS];
+// ─── Notifications ──────────────────────────────────────────────────────────
+
 export const notificationService = {
-  async list(): Promise<NotificationItem[]> { await delay(120); return [..._notifications]; },
-  async markAllRead(): Promise<void> {
-    await delay(80);
-    _notifications = _notifications.map((n) => ({ ...n, read: true }));
+  async list(): Promise<NotificationItem[]> {
+    const response = await http.get("/notifications");
+    return (response.data ?? []).map(normalizeNotification);
   },
+
   async markRead(id: string): Promise<void> {
-    await delay(50);
-    _notifications = _notifications.map((n) => (n.id === id ? { ...n, read: true } : n));
+    await http.patch(`/notifications/${id}/read`);
+  },
+
+  async markAllRead(): Promise<void> {
+    // Backend has no bulk mark-read endpoint — mark individually
+    const all = await notificationService.list();
+    const unread = all.filter((n) => !n.read);
+    await Promise.all(unread.map((n) => notificationService.markRead(n.id)));
+  },
+};
+
+// ─── Activity ───────────────────────────────────────────────────────────────
+
+export const activityService = {
+  async list(): Promise<TimelineEvent[]> {
+    const response = await http.get("/activity");
+    return (response.data ?? []).map(normalizeTimeline);
   },
 };
