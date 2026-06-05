@@ -6,12 +6,25 @@ import validateRequest from "../../shared/utils/validateRequest.js";
 
 import {
   createTaskValidation,
+  evaluateTaskValidation,
 } from "./task.validation.js";
 
 import * as controller from "./task.controller.js";
 
 const router =
   express.Router();
+
+router.get(
+  "/",
+  protect,
+  controller.listTasks
+);
+
+router.get(
+  "/:id",
+  protect,
+  controller.getTask
+);
 
 router.post(
   "/",
@@ -30,6 +43,8 @@ router.patch(
 router.patch(
   "/:id/review",
   protect,
+  evaluateTaskValidation,
+  validateRequest,
   controller.reviewTask
 );
 

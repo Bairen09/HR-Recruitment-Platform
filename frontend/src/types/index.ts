@@ -10,11 +10,20 @@ export interface User {
 
 export type CandidateStatus =
   | "NEW"
-  | "CONTACTED"
-  | "INTERVIEW"
+  | "AI_PROCESSING"
+  | "AI_PROCESSED"
+  | "FIRST_CALL_PENDING"
+  | "FIRST_CALL_DONE"
+  | "SECOND_CALL_PENDING"
+  | "SECOND_CALL_DONE"
+  | "THIRD_CALL_PENDING"
+  | "THIRD_CALL_DONE"
+  | "INTERVIEW_SCHEDULED"
+  | "INTERVIEW_COMPLETED"
+  | "TASK_ASSIGNED"
+  | "TASK_REVIEW"
   | "SELECTED"
-  | "DROPPED"
-  | "ON_HOLD";
+  | "DROPPED";
 
 export interface Candidate {
   id: string;
@@ -59,23 +68,36 @@ export interface Interview {
   candidateId: string;
   candidateName: string;
   interviewerName: string;
-  interviewType: "PHONE" | "VIDEO" | "ONSITE" | "TECHNICAL" | "HR";
+  interviewType: "HR" | "TECHNICAL" | "MANAGERIAL" | "FINAL";
   scheduledAt: string;
-  status: "SCHEDULED" | "COMPLETED" | "CANCELLED";
+  status: "SCHEDULED" | "COMPLETED" | "CANCELLED" | "NO_SHOW";
 }
 
-export type TaskStatus = "TODO" | "IN_PROGRESS" | "REVIEW" | "DONE";
+export type TaskStatus = "ASSIGNED" | "SUBMITTED" | "REVIEWED" | "PASSED" | "FAILED";
 export type TaskPriority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
 
 export interface Task {
   id: string;
+  candidateName?: string;
   title: string;
   description?: string;
   status: TaskStatus;
   priority: TaskPriority;
   dueDate: string;
   assigneeName: string;
-  candidateName?: string;
+}
+
+export interface DailyReport {
+  id: string;
+  hrId: string;
+  reportDate: string;
+  candidatesAssigned: number;
+  candidatesCalled: number;
+  interviewsScheduled: number;
+  selectedCandidates: number;
+  droppedCandidates: number;
+  pendingCandidates: number;
+  createdAt?: string;
 }
 
 export interface NotificationItem {
@@ -89,10 +111,14 @@ export interface NotificationItem {
 
 export interface DashboardStats {
   totalCandidates: number;
-  contactedCandidates: number;
+  firstCallPending: number;
+  secondCallPending: number;
+  thirdCallPending: number;
+  followUpsToday: number;
+  interviewsToday: number;
+  tasksToReview: number;
   selectedCandidates: number;
   droppedCandidates: number;
-  followUpsToday: number;
 }
 // Add to existing types file:
 

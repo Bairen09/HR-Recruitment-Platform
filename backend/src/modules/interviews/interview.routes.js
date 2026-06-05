@@ -6,12 +6,25 @@ import validateRequest from "../../shared/utils/validateRequest.js";
 
 import {
   createInterviewValidation,
+  evaluateInterviewValidation,
 } from "./interview.validation.js";
 
 import * as controller from "./interview.controller.js";
 
 const router =
   express.Router();
+
+router.get(
+  "/",
+  protect,
+  controller.listInterviews
+);
+
+router.get(
+  "/:id",
+  protect,
+  controller.getInterview
+);
 
 router.post(
   "/",
@@ -25,6 +38,14 @@ router.patch(
   "/:id/complete",
   protect,
   controller.completeInterview
+);
+
+router.patch(
+  "/:id/evaluate",
+  protect,
+  evaluateInterviewValidation,
+  validateRequest,
+  controller.evaluateInterview
 );
 
 export default router;

@@ -3,7 +3,7 @@ import { successResponse, errorResponse } from "../../shared/response/apiRespons
 import AppError from "../../shared/errors/AppError.js";
 import { resumeParserService } from "../../services/resumeParser.service.js";
 import { openaiResumeAnalyzerService } from "../../services/openaiResumeAnalyzer.service.js";
-import { createCandidate, findDuplicateCandidate } from "./candidate.service.js";
+import { createCandidate } from "./candidate.service.js";
 import crypto from "crypto";
 import fs from "fs/promises";
 import path from "path";
@@ -24,30 +24,30 @@ export const uploadResumes = asyncHandler(async (req, res) => {
     "[UPLOAD] Files:",
     Array.isArray(req.files)
       ? req.files.map((file) => ({
-          fieldname: file.fieldname,
-          originalname: file.originalname,
-          mimetype: file.mimetype,
-          size: file.size,
-        }))
+        fieldname: file.fieldname,
+        originalname: file.originalname,
+        mimetype: file.mimetype,
+        size: file.size,
+      }))
       : req.files
   );
   console.log(
     "[UPLOAD] File property:",
     req.file
       ? {
-          fieldname: req.file.fieldname,
-          originalname: req.file.originalname,
-          mimetype: req.file.mimetype,
-          size: req.file.size,
-        }
+        fieldname: req.file.fieldname,
+        originalname: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size,
+      }
       : null
   );
 
   const files = Array.isArray(req.files)
     ? req.files
     : req.file
-    ? [req.file]
-    : [];
+      ? [req.file]
+      : [];
 
   if (!files || files.length === 0) {
     throw new AppError("No files provided", 400);
@@ -93,7 +93,7 @@ export const uploadResumes = asyncHandler(async (req, res) => {
       const safeEmail = analysis.email
         ? analysis.email.toLowerCase().trim()
         : `unknown-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
-      const safePhone = analysis.phone?.trim() || undefined;
+      const safePhone = analysis.phone?.trim() || "000-000-0000";
 
       console.log(
         `[UPLOAD] Resolved candidate info: ${safeName}, ${safeEmail}, ${safePhone ?? "<none>"}`
@@ -117,12 +117,16 @@ export const uploadResumes = asyncHandler(async (req, res) => {
         aiAnalysis: {
           skills: Array.isArray(analysis.skills) ? analysis.skills : [],
           experienceYears: Math.max(0, parseInt(analysis.experienceYears) || 0),
-          education: analysis.education || "",
+          education:
+            Array.isArray(analysis.education)
+              ? JSON.stringify(analysis.education)
+              : analysis.education || "",
           currentCompany: analysis.currentCompany || "",
           designation: analysis.designation || "",
           location: analysis.location || "",
           summary: analysis.summary || "",
           resumeScore: Math.min(100, Math.max(0, parseInt(analysis.resumeScore) || 0)),
+          confidenceScores: analysis.confidenceScores || {},
           analyzedAt: new Date(),
         },
         emailHash: analysis.email
@@ -185,6 +189,10 @@ export const uploadResumes = asyncHandler(async (req, res) => {
       fileLog.insert = { id: candidate._id.toString(), code: candidate.code };
       uploadLog.stages.push({ stage: 'candidate_insert', file: file.originalname, id: candidate._id.toString(), code: candidate.code });
 
+      console.log(`[UPLOAD] Updating candidate profile for ${safeName}`);
+      await updateProfileFromResume(candidate._id, analysis);
+      uploadLog.stages.push({ stage: 'profile_update', file: file.originalname, id: candidate._id.toString() });
+
       results.push({
         id: candidate._id,
         name: candidate.name,
@@ -227,7 +235,8 @@ export const uploadResumes = asyncHandler(async (req, res) => {
     return successResponse(
       res,
       responseData,
-      `${duplicateCount} duplicate resume${duplicateCount === 1 ? "" : "s"} skipped`
+      `No new candidates were imported. ${failedCount} resume${failedCount === 1 ? "" : "s"
+      } matched existing candidate records.`
     );
   }
 
@@ -277,8 +286,7 @@ export const uploadResumes = asyncHandler(async (req, res) => {
   return successResponse(
     res,
     responseData,
-    `${successCount} candidate${successCount === 1 ? "" : "s"} imported successfully${
-      failedCount > 0 ? `, ${failedCount} failed` : ""
+    `${successCount} candidate${successCount === 1 ? "" : "s"} imported successfully${failedCount > 0 ? `, ${failedCount} failed` : ""
     }`
   );
 });
