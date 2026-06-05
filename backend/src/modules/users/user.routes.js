@@ -39,6 +39,16 @@ router.get(
 );
 
 router.get(
+  "/role/hr",
+  protect,
+  authorize(
+    ROLES.ADMIN,
+    ROLES.HR
+  ),
+  controller.getHRUsers
+);
+
+router.get(
   "/:id",
   protect,
   authorize(

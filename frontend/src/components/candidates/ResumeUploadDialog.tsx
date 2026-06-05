@@ -1,8 +1,10 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Upload, X, FileText, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useQuery } from "@tanstack/react-query";
+import { userService } from "@/services";
 
 interface SelectedFile {
   file: File;
@@ -12,14 +14,14 @@ interface SelectedFile {
 interface ResumeUploadDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onFilesSelected: (files: File[]) => Promise<void>;
+  onFilesSelected: (files: File[], category: string, assignedHR: string) => Promise<void>;
   isLoading?: boolean;
 }
 
 /**
  * ResumeUploadDialog Component
- * Handles PDF file selection and validation before upload
- * Features: Multiple file selection, PDF validation, size checks, drag-drop
+ * Handles PDF file selection, category selection, HR assignment, and validation before upload
+ * Features: Category selection, HR dropdown, Multiple file selection, PDF validation, size checks, drag-drop
  */
 export function ResumeUploadDialog({
   open,
@@ -28,8 +30,16 @@ export function ResumeUploadDialog({
   isLoading = false,
 }: ResumeUploadDialogProps) {
   const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([]);
+  const [category, setCategory] = useState<string>("");
+  const [assignedHR, setAssignedHR] = useState<string>("");
   const [error, setError] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch HR users
+  const { data: hrUsers = [] } = useQuery({
+    queryKey: ["hr-users"],
+    queryFn: () => userService.listHR(),
+  });
 
   const validateFile = (file: File): boolean => {
     const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -72,6 +82,17 @@ export function ResumeUploadDialog({
   };
 
   const handleUpload = async () => {
+    // Validate category and assignedHR
+    if (!category.trim()) {
+      setError("Please select a category");
+      return;
+    }
+
+    if (!assignedHR.trim()) {
+      setError("Please select an HR");
+      return;
+    }
+
     if (selectedFiles.length === 0) {
       setError("Please select at least one file");
       return;
@@ -80,8 +101,10 @@ export function ResumeUploadDialog({
     setError("");
     try {
       const files = selectedFiles.map((f) => f.file);
-      await onFilesSelected(files);
+      await onFilesSelected(files, category, assignedHR);
       setSelectedFiles([]);
+      setCategory("");
+      setAssignedHR("");
       onOpenChange(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
@@ -90,6 +113,12 @@ export function ResumeUploadDialog({
 
   const handleDialogOpenChange = (value: boolean) => {
     if (isLoading) return;
+    if (!value) {
+      setSelectedFiles([]);
+      setCategory("");
+      setAssignedHR("");
+      setError("");
+    }
     onOpenChange(value);
   };
 
@@ -99,7 +128,7 @@ export function ResumeUploadDialog({
         <DialogHeader>
           <DialogTitle>Upload Resumes</DialogTitle>
           <DialogDescription>
-            Select PDF resume files to auto-create candidates
+            Select category, assign HR, and upload resume files to auto-create candidates
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -115,6 +144,48 @@ export function ResumeUploadDialog({
               <AlertDescription>Uploading resumes. Please keep this dialog open until processing completes.</AlertDescription>
             </Alert>
           )}
+
+          {/* Category Selection */}
+          <div>
+            <label className="mb-2 block text-sm font-medium">Category *</label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              disabled={isLoading}
+              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+            >
+              <option value="">Select a category</option>
+              <option value="MERN Developer">MERN Developer</option>
+              <option value="Full Stack Developer">Full Stack Developer</option>
+              <option value="Frontend Developer">Frontend Developer</option>
+              <option value="Backend Developer">Backend Developer</option>
+              <option value="DevOps Engineer">DevOps Engineer</option>
+              <option value="Data Scientist">Data Scientist</option>
+              <option value="QA Engineer">QA Engineer</option>
+              <option value="Product Manager">Product Manager</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          {/* HR Selection */}
+          <div>
+            <label className="mb-2 block text-sm font-medium">Assigned HR *</label>
+            <select
+              value={assignedHR}
+              onChange={(e) => setAssignedHR(e.target.value)}
+              disabled={isLoading}
+              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+            >
+              <option value="">Select an HR</option>
+              {hrUsers.map((hr) => (
+                <option key={hr.id} value={hr.id}>
+                  {hr.name} ({hr.email})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* File Upload */}
           <div
             className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-500 transition-colors"
             onClick={() => fileInputRef.current?.click()}
@@ -167,7 +238,7 @@ export function ResumeUploadDialog({
             </Button>
             <Button
               onClick={handleUpload}
-              disabled={selectedFiles.length === 0 || isLoading}
+              disabled={selectedFiles.length === 0 || !category.trim() || !assignedHR.trim() || isLoading}
               className="flex-1"
             >
               {isLoading ? "Processing..." : "Upload"}

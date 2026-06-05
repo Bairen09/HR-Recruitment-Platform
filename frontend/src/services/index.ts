@@ -144,6 +144,16 @@ export const userService = {
       role: u.role,
     }));
   },
+
+  async listHR(): Promise<User[]> {
+    const response = await http.get("/users/role/hr");
+    return (response.data ?? []).map((u: any) => ({
+      id: u._id ?? u.id,
+      name: u.name,
+      email: u.email,
+      role: u.role,
+    }));
+  },
 };
 
 // ─── Dashboard ──────────────────────────────────────────────────────────────
