@@ -3,6 +3,7 @@ import { http } from "./http";
 export interface ResumeUploadResponse {
   success: boolean;
   imported: number;
+  duplicates?: number;
   failed: number;
   candidates: Array<{
     id: string;
@@ -22,13 +23,22 @@ export const resumeUploadService = {
    * Upload multiple resume PDFs to backend
    * Backend will parse, extract text, and create candidates
    */
-  async uploadResumes(files: File[], onProgress?: (progress: number) => void): Promise<ResumeUploadResponse> {
+  async uploadResumes(
+    files: File[],
+    category: string,
+    assignedHR: string,
+    onProgress?: (progress: number) => void
+  ): Promise<ResumeUploadResponse> {
     const formData = new FormData();
 
     // Append all files to form data
     files.forEach((file, index) => {
       formData.append("resumes", file);
     });
+
+    // Append category and assignedHR
+    formData.append("category", category);
+    formData.append("assignedHR", assignedHR);
 
     try {
       const response = await http.post<ResumeUploadResponse>(

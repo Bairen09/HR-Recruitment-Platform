@@ -191,7 +191,7 @@ export default function CandidatesPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/40 text-left">
-                {["Code", "Candidate", "Email", "Phone", "Category", "Status", "Created", ""].map((h) => (
+                {["Code", "Candidate", "Email", "Phone", "Category", "Assigned HR", "Status", "Created", ""].map((h) => (
                   <th key={h} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{h}</th>
                 ))}
               </tr>
@@ -266,8 +266,8 @@ export default function CandidatesPage() {
       <ResumeUploadDialog
         open={resumeDialogOpen}
         onOpenChange={setResumeDialogOpen}
-        onFilesSelected={async (files) => {
-          await resumeUploadMut.mutateAsync(files);
+        onFilesSelected={async (files, category, assignedHR) => {
+          await resumeUploadMut.mutateAsync({ files, category, assignedHR });
         }}
         isLoading={resumeUploadMut.isPending}
       />
@@ -291,6 +291,9 @@ function CandidateRow({ c, onDelete }: { c: Candidate; onDelete: () => void }) {
       <td className="px-4 py-3 text-muted-foreground">{c.phone ?? "—"}</td>
       <td className="px-4 py-3">
         <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{c.category ?? "General"}</span>
+      </td>
+      <td className="px-4 py-3 text-muted-foreground">
+        {typeof c.assignedTo === "object" && c.assignedTo?.name ? c.assignedTo.name : "Unassigned"}
       </td>
       <td className="px-4 py-3"><StatusBadge status={c.status} /></td>
       <td className="px-4 py-3 text-xs text-muted-foreground">{c.createdAt ? format(new Date(c.createdAt), "MMM d, yyyy") : "—"}</td>

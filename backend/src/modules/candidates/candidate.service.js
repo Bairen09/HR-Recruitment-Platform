@@ -43,6 +43,7 @@ export const createCandidate = async (
   const phone = payload.phone ? String(payload.phone).trim() : "";
   const category = payload.category ?? "General";
   const status = payload.status ?? payload.currentStatus ?? "NEW";
+  const assignedHR = payload.assignedHR ?? null; // Extract assignedHR from payload
 
   const duplicateConditions = [];
 
@@ -89,6 +90,7 @@ export const createCandidate = async (
     phone: phone || undefined,
     category,
     status,
+    assignedHR: assignedHR || undefined,
     code: finalCandidateCode,
     candidateCode: finalCandidateCode,
   });
@@ -101,6 +103,7 @@ export const createCandidate = async (
       phone: phone || undefined,
       category,
       status,
+      assignedHR: assignedHR || undefined,
       code: finalCandidateCode,
       candidateCode: finalCandidateCode,
       uploadInfo: {
@@ -127,11 +130,27 @@ export const createCandidate = async (
     performedBy: userId,
   });
 
+  // Create additional timeline event for HR assignment if assignedHR is provided
+  if (assignedHR) {
+    await createTimelineEvent({
+      candidateId: candidate._id,
+
+      eventType: "HR_ASSIGNED",
+
+      title: "HR Assigned During Upload",
+
+      description: `Candidate assigned to HR during resume upload`,
+
+      performedBy: userId,
+    });
+  }
+
   return candidate;
 };
 
 export const getCandidates = async (
-  query
+  query,
+  user
 ) => {
   const {
     page,
@@ -147,6 +166,14 @@ export const getCandidates = async (
   const filter = {
     isDeleted: false,
   };
+
+  // Role-based filtering: if user is HR, only show candidates assigned to them
+  if (user && user.role === "HR") {
+    filter.assignedHR = user.id;
+  } else if (assignedHR) {
+    // If user is ADMIN and specifies an assignedHR filter, apply it
+    filter.assignedHR = assignedHR;
+  }
 
   if (search) {
     filter.$or = [
@@ -173,10 +200,6 @@ export const getCandidates = async (
 
   if (status) {
     filter.status = status;
-  }
-
-  if (assignedHR) {
-    filter.assignedHR = assignedHR;
   }
 
   const candidates =

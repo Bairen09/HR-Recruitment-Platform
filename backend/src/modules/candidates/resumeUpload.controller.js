@@ -43,6 +43,17 @@ export const uploadResumes = asyncHandler(async (req, res) => {
       : null
   );
 
+  // Extract and validate category and assignedHR
+  const { category, assignedHR } = req.body;
+  
+  if (!category || !category.trim()) {
+    throw new AppError("Category is required", 400);
+  }
+
+  if (!assignedHR || !assignedHR.trim()) {
+    throw new AppError("Assigned HR is required", 400);
+  }
+
   const files = Array.isArray(req.files)
     ? req.files
     : req.file
@@ -110,7 +121,8 @@ export const uploadResumes = asyncHandler(async (req, res) => {
         name: safeName,
         email: safeEmail,
         phone: safePhone,
-        category: analysis.designation || "Imported from Resume",
+        category: category.trim(), // Use category from request
+        assignedHR: assignedHR.trim(), // Store assignedHR ID
         status: "NEW",
         source: "RESUME",
         resumeFilePath: filePath,
