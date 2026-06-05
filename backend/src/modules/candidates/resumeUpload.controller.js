@@ -4,7 +4,6 @@ import AppError from "../../shared/errors/AppError.js";
 import { resumeParserService } from "../../services/resumeParser.service.js";
 import { openaiResumeAnalyzerService } from "../../services/openaiResumeAnalyzer.service.js";
 import { createCandidate } from "./candidate.service.js";
-import { updateProfileFromResume } from "../ai/profileUpdater.service.js";
 import crypto from "crypto";
 import fs from "fs/promises";
 import path from "path";
@@ -59,6 +58,7 @@ export const uploadResumes = asyncHandler(async (req, res) => {
   const results = [];
   let successCount = 0;
   let failedCount = 0;
+  let duplicateCount = 0;
 
   for (const file of files) {
     try {
@@ -93,10 +93,10 @@ export const uploadResumes = asyncHandler(async (req, res) => {
       const safeEmail = analysis.email
         ? analysis.email.toLowerCase().trim()
         : `unknown-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
-      const safePhone = analysis.phone?.trim() || null;
+      const safePhone = analysis.phone?.trim() || "000-000-0000";
 
       console.log(
-        `[UPLOAD] Resolved candidate info: ${safeName}, ${safeEmail}, ${safePhone}`
+        `[UPLOAD] Resolved candidate info: ${safeName}, ${safeEmail}, ${safePhone ?? "<none>"}`
       );
       fileLog.resolved = { name: safeName, email: safeEmail, phone: safePhone };
 
@@ -133,6 +133,52 @@ export const uploadResumes = asyncHandler(async (req, res) => {
           ? crypto.createHash("md5").update(analysis.email.toLowerCase()).digest("hex")
           : null,
       };
+
+      console.log("[DUPLICATE CHECK START]");
+      console.log("Candidate email:", candidatePayload.email);
+      console.log("Candidate phone:", candidatePayload.phone);
+
+      const existingCandidate = await findDuplicateCandidate({
+        email: candidatePayload.email,
+        phone: candidatePayload.phone,
+      });
+
+      console.log("Existing candidate:", existingCandidate?._id?.toString() ?? null);
+
+      if (existingCandidate) {
+        console.log(
+          `[DUPLICATE CHECK] email: ${candidatePayload.email}, phone: ${candidatePayload.phone ?? "<none>"}, existing candidate id: ${existingCandidate._id}`
+        );
+
+        duplicateCount++;
+        uploadLog.stages.push({
+          stage: 'duplicate_check',
+          file: file.originalname,
+          email: candidatePayload.email,
+          phone: candidatePayload.phone || null,
+          existingCandidateId: existingCandidate._id.toString(),
+        });
+
+        fileLog.duplicate = {
+          existingCandidateId: existingCandidate._id.toString(),
+          email: existingCandidate.email,
+          phone: existingCandidate.phone,
+        };
+
+        results.push({
+          fileName: file.originalname,
+          duplicate: true,
+          existingCandidateId: existingCandidate._id.toString(),
+          email: existingCandidate.email,
+          phone: existingCandidate.phone,
+        });
+
+        uploadLog.files = uploadLog.files.map((f) =>
+          f.fileName === file.originalname ? { ...f, ...fileLog } : f
+        );
+
+        continue;
+      }
 
       console.log(`[UPLOAD] Candidate insert starting for ${safeName}`);
       uploadLog.stages.push({ stage: 'candidate_mapping', file: file.originalname, payload: candidatePayload });
@@ -175,6 +221,7 @@ export const uploadResumes = asyncHandler(async (req, res) => {
 
   const responseData = {
     imported: successCount,
+    duplicates: duplicateCount,
     failed: failedCount,
     candidates: results,
   };
@@ -182,16 +229,9 @@ export const uploadResumes = asyncHandler(async (req, res) => {
   // Attach detailed upload log (always in dev runs)
   responseData.uploadLog = uploadLog;
 
-  const isDuplicateOnlyUpload =
-    successCount === 0 &&
-    failedCount > 0 &&
-    results.every(
-      (result) =>
-        result.errors?.length === 1 &&
-        result.errors[0] === "Candidate already exists"
-    );
+  const duplicateOnlyUpload = successCount === 0 && failedCount === 0 && duplicateCount > 0;
 
-  if (isDuplicateOnlyUpload) {
+  if (duplicateOnlyUpload) {
     return successResponse(
       res,
       responseData,
@@ -208,6 +248,29 @@ export const uploadResumes = asyncHandler(async (req, res) => {
       responseData
     );
   }
+
+  const messageParts = [];
+  if (successCount > 0) {
+    messageParts.push(
+      `${successCount} candidate${successCount === 1 ? "" : "s"} imported successfully`
+    );
+  }
+  if (duplicateCount > 0) {
+    messageParts.push(
+      `${duplicateCount} duplicate resume${duplicateCount === 1 ? "" : "s"} skipped`
+    );
+  }
+  if (failedCount > 0) {
+    messageParts.push(
+      `${failedCount} resume${failedCount === 1 ? "" : "s"} failed`
+    );
+  }
+
+  return successResponse(
+    res,
+    responseData,
+    messageParts.join(", ")
+  );
 
   // persist upload log for traceability
   try {

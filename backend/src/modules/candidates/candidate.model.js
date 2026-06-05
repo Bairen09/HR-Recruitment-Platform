@@ -144,10 +144,16 @@ const candidateSchema = new mongoose.Schema(
 
 candidateSchema.index({
   email: 1,
+}, {
+  unique: true,
+  sparse: true,
 });
 
 candidateSchema.index({
   phone: 1,
+}, {
+  unique: true,
+  sparse: true,
 });
 
 candidateSchema.index({
