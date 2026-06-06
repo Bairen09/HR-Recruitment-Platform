@@ -18,17 +18,70 @@ const candidateProfileSchema =
 
       github: String,
 
-      education: Array,
+      education: {
+        type: Array,
+        default: [],
+      },
 
-      skills: Array,
+      skills: {
+        type: Array,
+        default: [],
+      },
 
-      inferredSkills: Array,
+      inferredSkills: {
+        type: Array,
+        default: [],
+      },
 
-      experience: Array,
+      experience: {
+        type: Array,
+        default: [],
+      },
 
-      projects: Array,
+      projects: {
+        type: Array,
+        default: [],
+      },
 
-      certifications: Array,
+      certifications: {
+        type: Array,
+        default: [],
+      },
+
+      technicalTraining: {
+        completed: {
+          type: Boolean,
+          default: false,
+        },
+        trainingName: String,
+        institute: String,
+        duration: String,
+        completionYear: Number,
+      },
+
+      currentLocation: {
+        type: String,
+        default: null,
+      },
+
+      permanentLocation: {
+        type: String,
+        default: null,
+      },
+
+      passingYear: Number,
+
+      candidateType: {
+        type: String,
+        enum: ["PASSOUT", "STUDENT"],
+      },
+
+      academicYear: {
+        type: String,
+        default: null,
+      },
+
+      cgpa: Number,
     },
     {
       timestamps: true,

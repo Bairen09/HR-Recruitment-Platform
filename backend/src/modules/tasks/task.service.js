@@ -23,6 +23,7 @@ export const listTasks =
     return Task.find()
       .populate("candidateId", "name email code")
       .populate("assignedBy", "name email")
+      .populate("reviewedBy", "name email")
       .sort({ createdAt: -1 });
   };
 
@@ -30,7 +31,8 @@ export const getTask =
   async (taskId) => {
     const task = await Task.findById(taskId)
       .populate("candidateId", "name email code")
-      .populate("assignedBy", "name email");
+      .populate("assignedBy", "name email")
+      .populate("reviewedBy", "name email");
 
     if (!task) {
       throw new AppError("Task not found", 404);
@@ -60,6 +62,8 @@ export const createTask =
       await Task.create({
         ...payload,
         assignedBy: userId,
+        projectDemoStatus: payload.projectDemoStatus ?? "PENDING",
+        completed: false,
       });
 
     await changeCandidateStatus(
@@ -126,7 +130,24 @@ export const submitTask =
     task.submissionLink =
       submissionLink;
 
+    task.submittedAt = new Date();
+
     await task.save();
+
+    await createTimelineEvent({
+      candidateId: task.candidateId,
+      eventType: TIMELINE_EVENTS.TASK_SUBMITTED,
+      title: "Task Submitted",
+      description: `Task submitted: ${task.title}`,
+      performedBy: userId,
+    });
+
+    await createNotification({
+      userId,
+      title: "Task Submitted",
+      message: "Candidate submitted task",
+      type: "TASK",
+    });
 
     await changeCandidateStatus(
       task.candidateId,
@@ -161,6 +182,9 @@ export const reviewTask =
       );
     }
 
+    task.reviewedBy = userId;
+    task.reviewedAt = new Date();
+
     const { outcome } = payload;
     const oldOutcome = task.reviewOutcome;
 
@@ -170,6 +194,9 @@ export const reviewTask =
       task.reviewOutcome = "SATISFIED";
       task.reviewNotes = payload.reviewNotes || null;
       task.score = payload.score || null;
+      task.completed = true;
+      task.completedAt = new Date();
+      task.reviewReason = payload.reason || null;
       await task.save();
 
       await createAuditLog({
@@ -196,6 +223,13 @@ export const reviewTask =
         performedBy: userId,
       });
 
+      await createNotification({
+        userId,
+        title: "Task Reviewed",
+        message: "Task reviewed: candidate selected",
+        type: "TASK",
+      });
+
       return task;
     }
 
@@ -206,6 +240,8 @@ export const reviewTask =
       task.reviewReason = payload.reason;
       task.reviewNotes = payload.reviewNotes || null;
       task.score = payload.score || null;
+      task.completed = true;
+      task.completedAt = new Date();
       await task.save();
 
       await createAuditLog({
@@ -232,6 +268,13 @@ export const reviewTask =
         performedBy: userId,
       });
 
+      await createNotification({
+        userId,
+        title: "Task Reviewed",
+        message: "Task reviewed: candidate failed",
+        type: "TASK",
+      });
+
       return task;
     }
 
@@ -242,6 +285,7 @@ export const reviewTask =
       task.reviewReason = payload.reason || null;
       task.reviewNotes = payload.reviewNotes || null;
       task.score = payload.score || null;
+      task.completed = false;
       await task.save();
 
       await createAuditLog({
@@ -262,6 +306,8 @@ export const reviewTask =
         deadline: payload.newDeadline,
         reTaskOf: task._id,
         status: "ASSIGNED",
+        projectDemoStatus: task.projectDemoStatus ?? "PENDING",
+        remarks: task.remarks,
       });
 
       await createAuditLog({
@@ -289,7 +335,14 @@ export const reviewTask =
         performedBy: userId,
       });
 
-      return { originalTask: task, reTask };
+      await createNotification({
+        userId,
+        title: "Task Reviewed",
+        message: "Task review outcome: needs improvement — re-task created",
+        type: "TASK",
+      });
+
+      return reTask;
     }
 
     throw new AppError("Invalid outcome", 400);
